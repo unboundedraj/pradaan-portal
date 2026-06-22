@@ -82,15 +82,19 @@ export const formatCurrency = (cents: number) =>
 
 Donations can originate from two sources tracked via the `transaction_source` enum:
 
-- **`STRIPE`** — Direct card payment for a drive (no wallet involved).
-- **`WALLET`** — Deducted from the donor's pre-funded virtual wallet balance.
+- **`STRIPE`** — Direct card payment via Stripe Checkout (redirects to Stripe, webhook confirms).
+- **`WALLET`** — Deducted from the donor's pre-funded virtual wallet balance (instant, no redirect).
 
-The donation Server Action must atomically:
-1. Verify sufficient wallet balance (if `source = WALLET`).
-2. Insert the `donations` row.
-3. Decrement `donor_profiles.wallet_balance`.
+Both options are presented on the drive detail page. The wallet button is shown only when the donor has a positive balance and is disabled when the entered amount exceeds the available balance.
 
-All three steps run inside a Supabase RPC (database function) to guarantee atomicity — no partial state is possible.
+**Wallet donation flow** (`donate_from_wallet` RPC — atomic):
+1. `UPDATE donor_profiles SET wallet_balance = wallet_balance - p_amount WHERE wallet_balance >= p_amount` — deducts balance, aborts if insufficient (no negative balance possible).
+2. `SELECT FOR UPDATE` on the drive row — prevents race conditions.
+3. `INSERT INTO donations (source = 'WALLET')` — immutable ledger entry.
+4. `UPDATE drives.current_amount` — credits the drive (capped at target).
+5. If overflow: `INSERT INTO pradaan_pot_ledger (type = 'INFLOW_OVERFLOW')`.
+
+All five steps are a single atomic transaction. If any step fails the entire donation rolls back.
 
 ### 3. Drive Lifecycle
 
@@ -419,10 +423,8 @@ pradaan-portal/
 │   │   │       └── new/page.tsx    # Create poll form
 │   │   ├── donor/                  # /donor — Donor dashboard
 │   │   │   ├── layout.tsx          # Donor shell
-│   │   │   ├── page.tsx            # Wallet balance + recent activity
-│   │   │   ├── donate/page.tsx     # Browse drives + donation flow
-│   │   │   ├── certificates/page.tsx # Dynamic certificate UI
-│   │   │   └── polls/page.tsx      # Vote on active governance polls
+│   │   │   ├── page.tsx            # Wallet balance + donation history
+│   │   │   └── wallet/page.tsx     # Stripe wallet top-up
 │   │   ├── org/                    # /org — Organization dashboard
 │   │   │   ├── layout.tsx          # Org shell
 │   │   │   ├── page.tsx            # Drive metrics overview
@@ -430,10 +432,8 @@ pradaan-portal/
 │   │   │       ├── page.tsx        # List org's drives
 │   │   │       └── new/page.tsx    # Create drive form
 │   │   └── api/                    # Route Handlers (HTTP verb contracts)
-│   │       ├── stripe/
-│   │       │   └── webhook/route.ts  # Stripe webhook receiver
-│   │       └── certificates/
-│   │           └── [donationId]/route.ts  # PDF byte stream for email
+│   │       └── stripe/
+│   │           └── webhook/route.ts  # Stripe webhook receiver
 │   ├── components/
 │   │   ├── navbar.tsx              # Top navigation bar
 │   │   ├── theme-toggle.tsx        # Light/dark mode toggle (Client Component)
@@ -585,6 +585,26 @@ import { useFormState } from 'react-dom';
 ### Instant Navigation
 
 For client-side navigations that feel instant, export `unstable_instant` from the route file. Suspense alone is insufficient in Next.js 16 for perceived performance improvements.
+
+---
+
+## Implemented vs. Pending
+
+### Done
+- Auth: signup (DONOR / ORGANISATION), email confirmation, login, logout, role-based redirect
+- Public homepage: live drive listing with progress bars
+- Public drive detail: progress stats, Stripe Checkout donation, wallet donation (if balance available)
+- Org portal: overview stats, drives list, drive detail, create drive (→ PENDING)
+- Admin portal: overview, org verification, drive approval, polls list, create poll
+- Donor dashboard: wallet balance, donation history, Stripe wallet top-up, donate from wallet
+- RBAC: proxy-level route guard + server-side `requireAdmin` guard on every admin mutation
+- Stripe webhook: handles `checkout.session.completed` for both donations and wallet top-ups
+- Overflow engine: `donate_with_overflow` and `donate_from_wallet` RPCs route excess funds to Pradaan Pot
+
+### Not yet built
+- **Governance voting UI** — `/donor/polls` page for donors to browse active polls and cast votes. The DB schema (`poll_votes` with `UNIQUE(poll_id, user_id)`) and the admin poll-creation flow are complete; only the donor-facing voting UI is missing.
+- **Donation certificates** — Print-optimised certificate component at `/donor/certificates`. Each donation gets a dynamically rendered React page (no PDF storage). A "Print / Download" button triggers `window.print()` scoped to the certificate block.
+- **Pradaan Pot display** — A page (likely `/donor` overview or a dedicated `/pot` route) showing the running overflow balance and recent INFLOW/OUTFLOW entries from `pradaan_pot_ledger`.
 
 ---
 
