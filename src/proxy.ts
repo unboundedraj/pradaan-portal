@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database, UserRole } from "@/types/database";
 
@@ -7,6 +8,23 @@ const ROLE_HOME: Record<string, string> = {
   ORGANIZATION: "/org",
   ADMIN: "/admin",
 };
+
+function createAdminClient() {
+  return createSupabaseClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
+
+async function getRole(userId: string): Promise<UserRole | null> {
+  const { data } = await createAdminClient()
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .single();
+  return (data as { role: UserRole } | null)?.role ?? null;
+}
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -58,13 +76,7 @@ export async function proxy(request: NextRequest) {
 
   // ── Authenticated user — enforce role-based route access ───────────────────
   if (user && isProtected) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    const role = (data as { role: UserRole } | null)?.role;
+    const role = await getRole(user.id);
 
     if (role) {
       const allowedPrefix = ROLE_HOME[role];
@@ -79,13 +91,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/login") || pathname.startsWith("/signup");
 
   if (user && isAuthRoute) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    const role = (data as { role: UserRole } | null)?.role;
+    const role = await getRole(user.id);
     const home = role ? ROLE_HOME[role] : "/";
     return NextResponse.redirect(new URL(home ?? "/", request.url));
   }

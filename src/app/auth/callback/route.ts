@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/types/database";
 
 const ROLE_HOME: Record<UserRole, string> = {
@@ -30,7 +30,11 @@ export async function GET(request: Request) {
       } = await supabase.auth.getUser();
 
       if (user) {
-        const { data: profile } = await supabase
+        // Use the admin client so RLS never blocks the profile read immediately
+        // after session exchange — the anon client's auth context may not be
+        // fully propagated within the same request.
+        const admin = await createAdminClient();
+        const { data: profile } = await admin
           .from("profiles")
           .select("role")
           .eq("id", user.id)

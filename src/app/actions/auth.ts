@@ -49,7 +49,9 @@ export async function signIn(
 
   if (error) return { error: toErrorMessage(error) };
 
-  const { data: profile } = await supabase
+  // Use the admin client so the role read is never blocked by RLS.
+  const admin = createAdminClient();
+  const { data: profile } = await admin
     .from("profiles")
     .select("role")
     .eq("id", data.user.id)
@@ -97,16 +99,33 @@ export async function signUp(
   // when email confirmation is enabled, so the anon client would fail RLS.
   const admin = await createAdminClient();
 
-  // The auth.users INSERT trigger has already created the profiles row.
-  const { error: roleError } = await admin
-    .from("profiles")
-    .update({ role })
-    .eq("id", userId);
+  // When email confirmation is enabled, Supabase returns a fake UUID (not
+  // present in auth.users) for already-registered emails to prevent enumeration.
+  // Detect this before touching any tables, or we get an FK violation.
+  const { data: { user: realUser } } = await admin.auth.admin.getUserById(userId);
+  if (!realUser) {
+    return {
+      error:
+        "An account with this email already exists. Please sign in instead.",
+    };
+  }
 
-  if (roleError) {
-    console.error("[auth] profiles.update failed for", userId, roleError);
+  // Upsert + select: if the trigger didn't run the row won't exist;
+  // upsert creates it. Chaining .select().single() means a silent DB-level
+  // rejection (e.g. trigger-created row already exists with a conflict we
+  // don't expect) surfaces as data=null instead of disappearing.
+  const { data: upsertedProfile, error: roleError } = await admin
+    .from("profiles")
+    .upsert({ id: userId, email, role, is_verified: false }, { onConflict: "id" })
+    .select("id")
+    .single();
+
+  if (roleError || !upsertedProfile) {
+    console.error("[auth] profiles.upsert failed for", userId, "error:", roleError, "data:", upsertedProfile);
     return { error: toErrorMessage(roleError, "Failed to set role. Please contact support.") };
   }
+
+  console.log("[auth] profiles row confirmed for", userId);
 
   if (role === "DONOR") {
     const fullName = formData.get("full_name") as string;

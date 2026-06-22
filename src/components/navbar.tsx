@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Heart, LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/actions/auth";
 import type { UserRole } from "@/types/database";
 
@@ -30,7 +30,7 @@ export async function Navbar() {
 
     if (user) {
       userEmail = user.email ?? null;
-      const { data: profile } = await supabase
+      const { data: profile } = await createAdminClient()
         .from("profiles")
         .select("role")
         .eq("id", user.id)
