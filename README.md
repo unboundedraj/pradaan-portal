@@ -524,12 +524,74 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ### Stripe Webhook (Local Dev)
 
+> **Required every dev session** — without this running, Stripe payments complete on Stripe's side but the donation/top-up is never recorded in the DB.
+
 ```bash
-# Install Stripe CLI, then:
 stripe listen --forward-to localhost:3000/api/stripe/webhook
 ```
 
-Copy the webhook signing secret output and set it as `STRIPE_WEBHOOK_SECRET` in `.env.local`.
+Copy the `whsec_...` secret printed on startup and set it as `STRIPE_WEBHOOK_SECRET` in `.env.local`. The same account always produces the same secret, so you only need to do this once.
+
+### One-time Supabase SQL setup
+
+Run each of these once in the **Supabase SQL editor** (Dashboard → SQL Editor). They are idempotent — safe to re-run.
+
+**1. RLS SELECT policies** (lets the session client read its own rows):
+
+```sql
+-- See the full script in the project history / README context.
+-- Covers: profiles, drives, org_profiles, donor_profiles,
+--         donations, wallet_transactions, polls, poll_options, poll_votes
+```
+
+**2. `donate_from_wallet` RPC** (required for wallet donations):
+
+```sql
+CREATE OR REPLACE FUNCTION donate_from_wallet(
+  p_donor_id UUID,
+  p_drive_id UUID,
+  p_amount   INTEGER
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_drive        drives%ROWTYPE;
+  v_overflow     INTEGER;
+  v_drive_credit INTEGER;
+  v_donation_id  UUID;
+BEGIN
+  UPDATE donor_profiles
+  SET    wallet_balance = wallet_balance - p_amount
+  WHERE  id = p_donor_id
+    AND  wallet_balance >= p_amount;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Insufficient wallet balance';
+  END IF;
+
+  SELECT * INTO v_drive FROM drives WHERE id = p_drive_id FOR UPDATE;
+
+  v_overflow     := GREATEST(0, (v_drive.current_amount + p_amount) - v_drive.target_amount);
+  v_drive_credit := p_amount - v_overflow;
+
+  INSERT INTO donations (donor_id, drive_id, amount, source)
+  VALUES (p_donor_id, p_drive_id, p_amount, 'WALLET')
+  RETURNING id INTO v_donation_id;
+
+  UPDATE drives
+  SET current_amount = current_amount + v_drive_credit
+  WHERE id = p_drive_id;
+
+  IF v_overflow > 0 THEN
+    INSERT INTO pradaan_pot_ledger (type, amount, reference_id)
+    VALUES ('INFLOW_OVERFLOW', v_overflow, v_donation_id);
+  END IF;
+END;
+$$;
+```
 
 ### Generate Supabase Types
 
@@ -537,7 +599,7 @@ Copy the webhook signing secret output and set it as `STRIPE_WEBHOOK_SECRET` in 
 npx supabase gen types typescript --project-id your-project-id > src/types/database.ts
 ```
 
-Re-run this command whenever the database schema changes.
+Re-run whenever the database schema changes (e.g. after adding `donate_from_wallet` above).
 
 ---
 
