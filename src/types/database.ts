@@ -172,9 +172,8 @@ export interface Database {
           id: string;
           title: string;
           description: string;
-          amount: number;
+          allocated_amount: number;
           status: PollStatus;
-          created_by: string;
           ends_at: string;
           created_at: string;
         };
@@ -182,9 +181,8 @@ export interface Database {
           id?: string;
           title: string;
           description: string;
-          amount: number;
+          allocated_amount: number;
           status?: PollStatus;
-          created_by: string;
           ends_at: string;
           created_at?: string;
         };
@@ -200,15 +198,18 @@ export interface Database {
         Row: {
           id: string;
           poll_id: string;
-          label: string;
+          option_text: string;
+          votes_count: number;
         };
         Insert: {
           id?: string;
           poll_id: string;
-          label: string;
+          option_text: string;
+          votes_count?: number;
         };
         Update: {
-          label?: string;
+          option_text?: string;
+          votes_count?: number;
         };
         Relationships: [];
       };

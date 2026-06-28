@@ -83,8 +83,7 @@ export async function createPoll(
     .insert({
       title,
       description,
-      amount: toCents(amountRupees),
-      created_by: callerId,
+      allocated_amount: toCents(amountRupees),
       ends_at: endsAt,
     })
     .select("id")
@@ -97,7 +96,7 @@ export async function createPoll(
 
   const { error: optionsError } = await admin
     .from("poll_options")
-    .insert(options.map((label) => ({ poll_id: poll.id, label })));
+    .insert(options.map((option_text) => ({ poll_id: poll.id, option_text })));
 
   if (optionsError) {
     console.error("[admin] poll_options.insert failed:", optionsError);

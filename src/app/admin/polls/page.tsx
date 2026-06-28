@@ -18,7 +18,7 @@ export default async function AdminPollsPage() {
 
   const { data: polls } = await admin
     .from("polls")
-    .select("id, title, status, amount, ends_at, created_at")
+    .select("id, title, status, allocated_amount, ends_at, created_at")
     .order("created_at", { ascending: false });
 
   return (
@@ -76,7 +76,7 @@ export default async function AdminPollsPage() {
                       {poll.title}
                     </td>
                     <td className="px-4 py-3 text-[var(--muted-foreground)]">
-                      {formatCurrency(poll.amount)}
+                      {formatCurrency(poll.allocated_amount)}
                     </td>
                     <td className="px-4 py-3">
                       <span
