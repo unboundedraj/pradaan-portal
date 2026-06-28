@@ -135,6 +135,7 @@ export interface Database {
           donor_id: string;
           amount: number;
           stripe_intent_id: string;
+          status: "COMPLETED";
           created_at: string;
         };
         Insert: {
@@ -142,6 +143,7 @@ export interface Database {
           donor_id: string;
           amount: number;
           stripe_intent_id: string;
+          status: "COMPLETED";
           created_at?: string;
         };
         Update: Record<string, never>; // immutable ledger

@@ -37,24 +37,64 @@ export async function POST(request: Request) {
 
     // ── Donation via Stripe ────────────────────────────────────────────────
     if (type === "donation" && drive_id) {
-      const { error } = await admin.rpc("donate_with_overflow", {
-        p_donor_id: donor_id,
-        p_drive_id: drive_id,
-        p_amount: amount,
-        p_source: "STRIPE",
-      });
+      const { data: drive, error: driveError } = await admin
+        .from("drives")
+        .select("current_amount, target_amount")
+        .eq("id", drive_id)
+        .single();
 
-      if (error) {
-        console.error("[webhook] donate_with_overflow failed:", error);
-        // Return 500 so Stripe retries delivery.
+      if (driveError || !drive) {
+        console.error("[webhook] drive not found:", drive_id, driveError);
+        return NextResponse.json({ error: "Drive not found" }, { status: 400 });
+      }
+
+      const overflow = Math.max(
+        0,
+        drive.current_amount + amount - drive.target_amount
+      );
+      const driveCredit = amount - overflow;
+
+      const { data: donation, error: donationError } = await admin
+        .from("donations")
+        .insert({ donor_id, drive_id, amount, source: "STRIPE" })
+        .select("id")
+        .single();
+
+      if (donationError) {
+        console.error("[webhook] donations.insert failed:", donationError);
         return NextResponse.json(
           { error: "Failed to record donation" },
           { status: 500 }
         );
       }
 
+      if (driveCredit > 0) {
+        const { error: driveUpdateError } = await admin
+          .from("drives")
+          .update({ current_amount: drive.current_amount + driveCredit })
+          .eq("id", drive_id);
+
+        if (driveUpdateError) {
+          console.error("[webhook] drive credit failed:", driveUpdateError);
+        }
+      }
+
+      if (overflow > 0) {
+        const { error: potError } = await admin
+          .from("pradaan_pot_ledger")
+          .insert({
+            type: "INFLOW_OVERFLOW",
+            amount: overflow,
+            reference_id: donation.id,
+          });
+
+        if (potError) {
+          console.error("[webhook] pradaan_pot_ledger.insert failed:", potError);
+        }
+      }
+
       console.log(
-        `[webhook] donation recorded: donor=${donor_id} drive=${drive_id} amount=${amount}`
+        `[webhook] donation recorded: donor=${donor_id} drive=${drive_id} amount=${amount} overflow=${overflow}`
       );
     }
 
@@ -72,6 +112,7 @@ export async function POST(request: Request) {
           donor_id,
           amount,
           stripe_intent_id: paymentIntentId,
+          status: "COMPLETED",
         });
 
       if (txError) {
