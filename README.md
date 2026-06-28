@@ -682,19 +682,21 @@ These are the design decisions that set Pradaan apart from a standard fundraisin
 
 ### Done
 - Auth: signup (DONOR / ORGANISATION), email confirmation, login, logout, role-based redirect
-- Public homepage: live drive listing with progress bars
-- Public drive detail: progress stats, Stripe Checkout donation, wallet donation (if balance available)
-- Org portal: overview stats, drives list, drive detail, create drive (→ PENDING)
-- Admin portal: overview, org verification, drive approval, polls list, create poll
-- Donor dashboard: wallet balance, donation history, Stripe wallet top-up, donate from wallet
-- RBAC: proxy-level route guard + server-side `requireAdmin` guard on every admin mutation
-- Stripe webhook: handles `checkout.session.completed` for both donations and wallet top-ups
-- Overflow engine: `donate_with_overflow` and `donate_from_wallet` RPCs route excess funds to Pradaan Pot
-
-### Not yet built
-- **Governance voting UI** — `/donor/polls` page for donors to browse active polls and cast votes. The DB schema (`poll_votes` with `UNIQUE(poll_id, user_id)`) and the admin poll-creation flow are complete; only the donor-facing voting UI is missing.
-- **Donation certificates** — Print-optimised certificate component at `/donor/certificates`. Each donation gets a dynamically rendered React page (no PDF storage). A "Print / Download" button triggers `window.print()` scoped to the certificate block.
-- **Pradaan Pot display** — A page (likely `/donor` overview or a dedicated `/pot` route) showing the running overflow balance and recent INFLOW/OUTFLOW entries from `pradaan_pot_ledger`.
+- Middleware (`src/middleware.ts`): session refresh, unauthenticated redirect, role-based route enforcement — `/donor`, `/org`, `/admin` are all protected
+- Public homepage: active drive listing with progress bars; past drives shown in a separate section with "Drive ended" badge
+- Public drive detail: progress stats, Stripe Checkout donation, wallet donation, per-drive donor leaderboard (top 5 by total contributed)
+- Org portal: overview stats, drives list, drive detail, create drive (→ PENDING approval)
+- Admin portal: overview, org verification, drive approval, polls list, create poll (pot-aware), resolve poll
+- Donor dashboard: wallet balance, donation history, top-up via Stripe, donate from wallet
+- Donor browse drives (`/donor/donate`): active and past drive grid with wallet balance hint and "Goal reached" badge
+- Donor governance (`/donor/polls`): vote on active polls, see results with progress bars, one vote per poll enforced at DB level
+- Donor Pradaan Pot (`/donor/pot`): live pot balance, available balance after active poll commitments, full INFLOW/OUTFLOW ledger
+- Donor certificates (`/donor/certificates`): one certificate per drive, summing all donations to that drive; modal preview + download as PDF via browser print
+- Live poll results ticker: scrolling news-ticker on every donor page showing resolved poll outcomes
+- RBAC: middleware-enforced route guard + server-side `requireAdmin` guard on every admin mutation
+- Stripe webhook: handles `checkout.session.completed` for both donations and wallet top-ups; inline overflow logic (no RPC dependency)
+- Overflow engine: donations past a drive's `target_amount` flow to `pradaan_pot_ledger`; drives close by `ends_at` date only, not by hitting their goal
+- Pot accounting: poll resolution writes `OUTFLOW_POLL` to ledger; active poll amounts deducted from available balance before new poll creation
 
 ---
 
