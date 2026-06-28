@@ -69,7 +69,8 @@ export default async function DriveDetailPage({
   }
 
   const isDonor = donorRole === "DONOR";
-  const isAcceptingDonations = ["APPROVED", "ACTIVE"].includes(drive.status);
+  const hasEnded = new Date(drive.ends_at) <= new Date();
+  const isAcceptingDonations = drive.status !== "PENDING" && !hasEnded;
 
   const pct = driveProgress(drive.current_amount, drive.target_amount);
   const endsAt = new Date(drive.ends_at).toLocaleDateString("en-IN", {
@@ -144,13 +145,13 @@ export default async function DriveDetailPage({
 
         {/* Right — donation panel */}
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 lg:self-start">
-          {drive.status === "COMPLETED" ? (
+          {hasEnded ? (
             <div className="text-center">
               <p className="font-semibold text-[var(--foreground)]">
-                Drive completed
+                Drive ended
               </p>
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                This drive has finished raising funds. Thank you to all donors!
+                This drive closed on {endsAt}. Thank you to all donors!
               </p>
             </div>
           ) : !isAcceptingDonations ? (

@@ -9,7 +9,7 @@ export default async function HomePage() {
   const { data: drives } = await admin
     .from("drives")
     .select("id, title, description, target_amount, current_amount, ends_at, org_id")
-    .in("status", ["APPROVED", "ACTIVE"])
+    .in("status", ["APPROVED", "ACTIVE", "COMPLETED"])
     .order("created_at", { ascending: false });
 
   const orgIds = [...new Set((drives ?? []).map((d) => d.org_id))];
@@ -56,74 +56,108 @@ export default async function HomePage() {
 
       {/* Drive listing */}
       <section id="drives" className="mt-24">
-        <h2 className="text-2xl font-semibold text-[var(--foreground)]">
-          Active drives
-        </h2>
-        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          {drives?.length
-            ? `${drives.length} drive${drives.length === 1 ? "" : "s"} currently raising funds`
-            : "No active drives at the moment — check back soon."}
-        </p>
+        {(() => {
+          const now = Date.now();
+          const active = (drives ?? []).filter(
+            (d) => new Date(d.ends_at).getTime() > now
+          );
+          const ended = (drives ?? []).filter(
+            (d) => new Date(d.ends_at).getTime() <= now
+          );
 
-        {drives && drives.length > 0 && (
-          <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {drives.map((drive) => {
-              const pct = driveProgress(
-                drive.current_amount,
-                drive.target_amount
-              );
-              const daysLeft = Math.max(
-                0,
-                Math.ceil(
-                  (new Date(drive.ends_at).getTime() - Date.now()) /
-                    (1000 * 60 * 60 * 24)
-                )
-              );
-
-              return (
-                <Link
-                  key={drive.id}
-                  href={`/drives/${drive.id}`}
-                  className="group flex flex-col rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 transition-all hover:border-[var(--primary)] hover:shadow-sm"
-                >
-                  {/* Org name */}
+          const DriveCard = ({
+            drive,
+            isEnded,
+          }: {
+            drive: (typeof drives)[number];
+            isEnded: boolean;
+          }) => {
+            const pct = driveProgress(drive.current_amount, drive.target_amount);
+            const daysLeft = Math.max(
+              0,
+              Math.ceil(
+                (new Date(drive.ends_at).getTime() - now) / (1000 * 60 * 60 * 24)
+              )
+            );
+            return (
+              <Link
+                key={drive.id}
+                href={`/drives/${drive.id}`}
+                className={`group flex flex-col rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 transition-all hover:border-[var(--primary)] hover:shadow-sm ${isEnded ? "opacity-60" : ""}`}
+              >
+                <div className="flex items-start justify-between gap-2">
                   <p className="text-xs font-medium text-[var(--primary)]">
                     {orgNameById[drive.org_id] ?? "Organisation"}
                   </p>
-
-                  {/* Title */}
-                  <h3 className="mt-1.5 line-clamp-2 text-base font-semibold text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors">
-                    {drive.title}
-                  </h3>
-
-                  {/* Description */}
-                  <p className="mt-2 line-clamp-2 flex-1 text-sm text-[var(--muted-foreground)]">
-                    {drive.description}
-                  </p>
-
-                  {/* Progress */}
-                  <div className="mt-5">
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--muted)]">
-                      <div
-                        className="h-full rounded-full bg-[var(--primary)] transition-all"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-xs text-[var(--muted-foreground)]">
-                      <span>
-                        <span className="font-medium text-[var(--foreground)]">
-                          {formatCurrency(drive.current_amount)}
-                        </span>{" "}
-                        raised
-                      </span>
-                      <span>{daysLeft}d left · {pct}%</span>
-                    </div>
+                  {isEnded && (
+                    <span className="shrink-0 rounded-full bg-[var(--muted)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                      Drive ended
+                    </span>
+                  )}
+                </div>
+                <h3 className="mt-1.5 line-clamp-2 text-base font-semibold text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors">
+                  {drive.title}
+                </h3>
+                <p className="mt-2 line-clamp-2 flex-1 text-sm text-[var(--muted-foreground)]">
+                  {drive.description}
+                </p>
+                <div className="mt-5">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--muted)]">
+                    <div
+                      className="h-full rounded-full bg-[var(--primary)] transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
                   </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
+                  <div className="mt-2 flex items-center justify-between text-xs text-[var(--muted-foreground)]">
+                    <span>
+                      <span className="font-medium text-[var(--foreground)]">
+                        {formatCurrency(drive.current_amount)}
+                      </span>{" "}
+                      raised
+                    </span>
+                    <span>{isEnded ? `${pct}% funded` : `${daysLeft}d left · ${pct}%`}</span>
+                  </div>
+                </div>
+              </Link>
+            );
+          };
+
+          return (
+            <>
+              <h2 className="text-2xl font-semibold text-[var(--foreground)]">
+                Active drives
+              </h2>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                {active.length
+                  ? `${active.length} drive${active.length === 1 ? "" : "s"} currently raising funds`
+                  : "No active drives at the moment — check back soon."}
+              </p>
+              {active.length > 0 && (
+                <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                  {active.map((drive) => (
+                    <DriveCard key={drive.id} drive={drive} isEnded={false} />
+                  ))}
+                </div>
+              )}
+
+              {ended.length > 0 && (
+                <>
+                  <h2 className="mt-16 text-2xl font-semibold text-[var(--foreground)]">
+                    Past drives
+                  </h2>
+                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                    Completed campaigns
+                  </p>
+                  <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                    {ended.map((drive) => (
+                      <DriveCard key={drive.id} drive={drive} isEnded={true} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          );
+        })()}
       </section>
 
       {/* Footer nudge */}

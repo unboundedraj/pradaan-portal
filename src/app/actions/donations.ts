@@ -43,12 +43,15 @@ export async function createDonationCheckout(
 
   const { data: drive } = await admin
     .from("drives")
-    .select("title, status")
+    .select("title, status, ends_at")
     .eq("id", driveId)
     .single();
 
-  if (!drive || !["APPROVED", "ACTIVE"].includes(drive.status)) {
+  if (!drive || drive.status === "PENDING") {
     return { error: "This drive is not accepting donations right now." };
+  }
+  if (new Date(drive.ends_at) <= new Date()) {
+    return { error: "This drive has ended." };
   }
 
   // toCents converts rupees → paise; Stripe uses the smallest currency unit.
@@ -155,12 +158,23 @@ export async function createWalletDonation(
   const amountPaise = toCents(amountRupees);
 
   const [{ data: drive }, { data: donorProfile }] = await Promise.all([
-    admin.from("drives").select("status").eq("id", driveId).single(),
+    admin
+      .from("drives")
+      .select("status, target_amount, current_amount, ends_at")
+      .eq("id", driveId)
+      .single(),
     admin.from("donor_profiles").select("wallet_balance").eq("id", user.id).single(),
   ]);
 
-  if (!drive || !["APPROVED", "ACTIVE"].includes(drive.status)) {
+  // PENDING drives are not approved; everything else (APPROVED/ACTIVE/COMPLETED) can
+  // still receive donations — the drive may have been marked COMPLETED by a DB
+  // trigger when it hit its target, but per product design it accepts donations
+  // (overflow flows to the pot) until the end date.
+  if (!drive || drive.status === "PENDING") {
     return { error: "This drive is not accepting donations right now." };
+  }
+  if (new Date(drive.ends_at) <= new Date()) {
+    return { error: "This drive has ended." };
   }
 
   if (!donorProfile || donorProfile.wallet_balance < amountPaise) {
@@ -169,18 +183,53 @@ export async function createWalletDonation(
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any).rpc("donate_from_wallet", {
-    p_donor_id: user.id,
-    p_drive_id: driveId,
-    p_amount: amountPaise,
+  // Inline the donate_from_wallet RPC — the deployed version references a
+  // non-existent column (reference_id). Replicate its logic directly.
+  const driveGap = Math.max(0, (drive.target_amount ?? 0) - (drive.current_amount ?? 0));
+  const overflow = Math.max(0, amountPaise - driveGap);
+
+  const { error: walletErr } = await admin
+    .from("donor_profiles")
+    .update({ wallet_balance: donorProfile.wallet_balance - amountPaise })
+    .eq("id", user.id);
+
+  if (walletErr) {
+    console.error("[donations] wallet deduct failed:", walletErr);
+    return { error: "Failed to deduct wallet balance. Please try again." };
+  }
+
+  await admin.from("wallet_transactions").insert({
+    donor_id: user.id,
+    amount: amountPaise,
+    type: "DEBIT",
+    status: "COMPLETED",
+    description: "Donation to drive",
   });
 
-  if (error) {
-    console.error("[donations] donate_from_wallet failed:", error);
-    if (error.message?.includes("Insufficient"))
-      return { error: "Insufficient wallet balance." };
+  const { error: donationErr } = await admin.from("donations").insert({
+    donor_id: user.id,
+    drive_id: driveId,
+    amount: amountPaise,
+    source: "WALLET",
+  });
+
+  if (donationErr) {
+    console.error("[donations] insert donation failed:", donationErr);
     return { error: "Donation failed. Please try again." };
+  }
+
+  await admin
+    .from("drives")
+    .update({ current_amount: (drive.current_amount ?? 0) + amountPaise })
+    .eq("id", driveId);
+
+  if (overflow > 0) {
+    await admin.from("pradaan_pot_ledger").insert({
+      amount: overflow,
+      type: "INFLOW_OVERFLOW",
+      drive_id: driveId,
+      description: "Overflow from wallet donation",
+    });
   }
 
   redirect("/donor?donated=success");
