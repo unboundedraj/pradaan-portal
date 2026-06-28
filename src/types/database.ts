@@ -134,7 +134,9 @@ export interface Database {
           id: string;
           donor_id: string;
           amount: number;
-          stripe_intent_id: string;
+          stripe_intent_id: string | null;
+          type: string | null;
+          description: string | null;
           status: "COMPLETED";
           created_at: string;
         };
@@ -142,7 +144,9 @@ export interface Database {
           id?: string;
           donor_id: string;
           amount: number;
-          stripe_intent_id: string;
+          stripe_intent_id?: string | null;
+          type?: string | null;
+          description?: string | null;
           status: "COMPLETED";
           created_at?: string;
         };

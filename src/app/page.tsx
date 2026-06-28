@@ -69,7 +69,7 @@ export default async function HomePage() {
             drive,
             isEnded,
           }: {
-            drive: (typeof drives)[number];
+            drive: NonNullable<typeof drives>[number];
             isEnded: boolean;
           }) => {
             const pct = driveProgress(drive.current_amount, drive.target_amount);
