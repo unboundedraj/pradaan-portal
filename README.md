@@ -672,6 +672,8 @@ These are the design decisions that set Pradaan apart from a standard fundraisin
 
 - **Dual payment sources, one ledger.** Donations can come from Stripe Checkout or from the donor's pre-funded wallet. Both paths produce an identical immutable `donations` row with a `source` flag, so the history is unified regardless of how the payment was made.
 
+- **Per-drive donor leaderboard.** Every drive page shows a ranked leaderboard of its top contributors — ranked by total amount donated across all contributions to that drive, not just a single transaction. Gold, silver, and bronze recognition for the top three; fully server-rendered, no client JS required.
+
 - **Certificates without storage.** Donation certificates are generated dynamically as print-optimised React components. There are no PDF files, no S3 buckets, no expiring URLs — a certificate URL is always valid because it renders on demand.
 
 ---

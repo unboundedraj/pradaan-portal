@@ -67,8 +67,9 @@ export default async function DonorLayout({ children }: { children: React.ReactN
             {[
               { href: "/donor", label: "Wallet" },
               { href: "/donor/donate", label: "Browse drives" },
-              { href: "/donor/certificates", label: "Certificates" },
+              { href: "/donor/pot", label: "Pradaan Pot" },
               { href: "/donor/polls", label: "Vote" },
+              { href: "/donor/certificates", label: "Certificates" },
             ].map(({ href, label }) => (
               <a
                 key={href}

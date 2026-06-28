@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Trophy } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency, driveProgress } from "@/lib/money";
@@ -36,11 +36,37 @@ export default async function DriveDetailPage({
 
   if (!drive) notFound();
 
-  const { data: orgProfile } = await admin
-    .from("org_profiles")
-    .select("org_name")
-    .eq("id", drive.org_id)
-    .single();
+  const [{ data: orgProfile }, { data: driveDonations }] = await Promise.all([
+    admin.from("org_profiles").select("org_name").eq("id", drive.org_id).single(),
+    admin.from("donations").select("donor_id, amount").eq("drive_id", id),
+  ]);
+
+  // Aggregate donations by donor and rank
+  const totalsById: Record<string, number> = {};
+  for (const d of driveDonations ?? []) {
+    totalsById[d.donor_id] = (totalsById[d.donor_id] ?? 0) + d.amount;
+  }
+  const rankedDonorIds = Object.entries(totalsById)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([id]) => id);
+
+  const { data: donorNames } = rankedDonorIds.length
+    ? await admin
+        .from("donor_profiles")
+        .select("id, full_name")
+        .in("id", rankedDonorIds)
+    : { data: [] };
+
+  const nameById = Object.fromEntries(
+    (donorNames ?? []).map((d) => [d.id, d.full_name])
+  );
+
+  const leaderboard = rankedDonorIds.map((donorId, i) => ({
+    rank: i + 1,
+    name: nameById[donorId] ?? "Anonymous",
+    total: totalsById[donorId],
+  }));
 
   // Check auth to decide whether to show the donate form
   const supabase = await createClient();
@@ -193,6 +219,47 @@ export default async function DriveDetailPage({
           )}
         </div>
       </div>
+
+      {/* Donor leaderboard */}
+      {leaderboard.length > 0 && (
+        <div className="mt-12">
+          <div className="flex items-center gap-2">
+            <Trophy size={16} className="text-[var(--primary)]" />
+            <h2 className="text-base font-semibold text-[var(--foreground)]">
+              Top donors
+            </h2>
+          </div>
+          <div className="mt-4 overflow-hidden rounded-xl border border-[var(--border)]">
+            {leaderboard.map((entry, i) => {
+              const medal = ["🥇", "🥈", "🥉"][i] ?? null;
+              return (
+                <div
+                  key={entry.rank}
+                  className={`flex items-center gap-4 px-5 py-3.5 text-sm ${
+                    i < leaderboard.length - 1
+                      ? "border-b border-[var(--border)]"
+                      : ""
+                  } ${i === 0 ? "bg-[var(--primary)]/5" : "bg-[var(--card)]"}`}
+                >
+                  <span className="w-6 shrink-0 text-center text-base">
+                    {medal ?? (
+                      <span className="text-xs text-[var(--muted-foreground)]">
+                        {entry.rank}
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex-1 font-medium text-[var(--foreground)]">
+                    {entry.name}
+                  </span>
+                  <span className="font-semibold text-[var(--foreground)]">
+                    {formatCurrency(entry.total)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
