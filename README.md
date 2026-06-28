@@ -526,8 +526,12 @@ Open [http://localhost:3000](http://localhost:3000).
 
 > **Required every dev session** — without this running, Stripe payments complete on Stripe's side but the donation/top-up is never recorded in the DB.
 
+The Stripe CLI must be authenticated to work. If `stripe listen` (without flags) errors with "You have not configured API keys", pass the key explicitly:
+
 ```bash
-stripe listen --forward-to localhost:3000/api/stripe/webhook
+stripe listen \
+  --api-key $STRIPE_SECRET_KEY \
+  --forward-to localhost:3000/api/stripe/webhook
 ```
 
 Copy the `whsec_...` secret printed on startup and set it as `STRIPE_WEBHOOK_SECRET` in `.env.local`. The same account always produces the same secret, so you only need to do this once.
