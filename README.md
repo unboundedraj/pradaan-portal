@@ -654,6 +654,28 @@ For client-side navigations that feel instant, export `unstable_instant` from th
 
 ---
 
+## What Makes Pradaan Different
+
+These are the design decisions that set Pradaan apart from a standard fundraising platform:
+
+- **Overflow engine, not a cap.** Drives never close early when they hit their goal. Every rupee beyond the target flows automatically into the Pradaan Pot — an overflow bank that belongs to the whole community, not a single campaign.
+
+- **Community-governed surplus.** The Pradaan Pot is disbursed through transparent, time-bound governance polls. Donors — the people who funded the pot — are the ones who decide where the surplus goes. One donor, one vote, enforced at the database level.
+
+- **Pot-aware poll creation.** Admins can only allocate what actually exists. When creating a new poll, the creation form shows the real available balance (pot total minus the amounts already committed by open polls), and the server rejects any amount that exceeds it. No double-spending.
+
+- **Atomic pot accounting.** When a poll is resolved, the `allocated_amount` is immediately written as an `OUTFLOW_POLL` entry in the `pradaan_pot_ledger`. The ledger is append-only and immutable — every rupee that ever entered or left the pot is permanently recorded.
+
+- **Live poll results ticker.** The donor dashboard shows a continuously scrolling news-ticker at the bottom of every page, displaying the outcome of all resolved polls — which option won and by what percentage. Donors always know how past pot disbursements were decided.
+
+- **Integer-only money.** All monetary values are stored as 64-bit integer cents. No floats, no rounding errors, no IEEE 754 surprises — ever.
+
+- **Dual payment sources, one ledger.** Donations can come from Stripe Checkout or from the donor's pre-funded wallet. Both paths produce an identical immutable `donations` row with a `source` flag, so the history is unified regardless of how the payment was made.
+
+- **Certificates without storage.** Donation certificates are generated dynamically as print-optimised React components. There are no PDF files, no S3 buckets, no expiring URLs — a certificate URL is always valid because it renders on demand.
+
+---
+
 ## Implemented vs. Pending
 
 ### Done
