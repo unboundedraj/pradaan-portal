@@ -4,6 +4,7 @@ import { CheckCircle2 } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/money";
+import { DonationSuccessRefresh } from "@/components/donation-success-refresh";
 
 export const metadata: Metadata = { title: "Wallet" };
 
@@ -56,12 +57,16 @@ export default async function DonorWalletPage({
     <div>
       {/* Post-payment success banners */}
       {(donated === "success" || topup === "success") && (
-        <div className="mb-6 flex items-center gap-2 rounded-md bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
-          <CheckCircle2 size={16} />
-          {donated === "success"
-            ? "Donation received! Thank you for giving."
-            : "Wallet topped up successfully."}
-        </div>
+        <>
+          <div className="mb-6 flex items-center gap-2 rounded-md bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
+            <CheckCircle2 size={16} />
+            {donated === "success"
+              ? "Donation received! Thank you for giving."
+              : "Wallet topped up successfully."}
+          </div>
+          {/* Refreshes page after 3 s so the webhook-written donation/top-up shows up */}
+          <DonationSuccessRefresh />
+        </>
       )}
 
       <h1 className="text-2xl font-semibold text-[var(--foreground)]">
