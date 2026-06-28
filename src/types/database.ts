@@ -154,14 +154,16 @@ export interface Database {
           id: string;
           type: PotLedgerType;
           amount: number;
-          reference_id: string;
+          drive_id: string | null;
+          description: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           type: PotLedgerType;
           amount: number;
-          reference_id: string;
+          drive_id?: string | null;
+          description?: string | null;
           created_at?: string;
         };
         Update: Record<string, never>; // immutable ledger

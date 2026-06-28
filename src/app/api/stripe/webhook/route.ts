@@ -85,7 +85,8 @@ export async function POST(request: Request) {
           .insert({
             type: "INFLOW_OVERFLOW",
             amount: overflow,
-            reference_id: donation.id,
+            drive_id,
+            description: `Overflow from donation ${donation.id}`,
           });
 
         if (potError) {

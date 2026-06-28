@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { toCents } from "@/lib/money";
+import { toCents, formatCurrency } from "@/lib/money";
 
 /** Returns the caller's user ID only when they hold the ADMIN role, null otherwise. */
 async function requireAdmin(): Promise<string | null> {
@@ -78,6 +78,23 @@ export async function createPoll(
 
   const admin = createAdminClient();
 
+  // Validate against available pot balance (pot total − active poll commitments)
+  const [{ data: ledger }, { data: activePolls }] = await Promise.all([
+    admin.from("pradaan_pot_ledger").select("type, amount"),
+    admin.from("polls").select("allocated_amount").eq("status", "ACTIVE"),
+  ]);
+  const potBalance = (ledger ?? []).reduce(
+    (s, e) => (e.type === "INFLOW_OVERFLOW" ? s + e.amount : s - e.amount),
+    0
+  );
+  const committed = (activePolls ?? []).reduce((s, p) => s + p.allocated_amount, 0);
+  const available = potBalance - committed;
+  if (toCents(amountRupees) > available) {
+    return {
+      error: `Amount exceeds available Pradaan Pot balance. Available: ${formatCurrency(available)} (after active poll commitments).`,
+    };
+  }
+
   const { data: poll, error: pollError } = await admin
     .from("polls")
     .insert({
@@ -105,4 +122,45 @@ export async function createPoll(
 
   revalidatePath("/admin/polls");
   redirect("/admin/polls");
+}
+
+// ─── Resolve Poll ──────────────────────────────────────────────────────────────
+
+export async function resolvePoll(pollId: string, _formData: FormData) {
+  if (!(await requireAdmin())) return;
+
+  const admin = createAdminClient();
+  const { data: poll } = await admin
+    .from("polls")
+    .select("status, allocated_amount, title")
+    .eq("id", pollId)
+    .single();
+
+  if (!poll || poll.status !== "ACTIVE") return;
+
+  await admin.from("polls").update({ status: "RESOLVED" }).eq("id", pollId);
+
+  await admin.from("pradaan_pot_ledger").insert({
+    type: "OUTFLOW_POLL",
+    amount: poll.allocated_amount,
+    description: poll.title,
+  });
+
+  revalidatePath("/admin/polls");
+}
+
+// ─── Helpers (exported for use in server components) ─────────────────────────
+
+export async function getAvailablePotBalance(): Promise<number> {
+  const admin = createAdminClient();
+  const [{ data: ledger }, { data: activePolls }] = await Promise.all([
+    admin.from("pradaan_pot_ledger").select("type, amount"),
+    admin.from("polls").select("allocated_amount").eq("status", "ACTIVE"),
+  ]);
+  const potBalance = (ledger ?? []).reduce(
+    (s, e) => (e.type === "INFLOW_OVERFLOW" ? s + e.amount : s - e.amount),
+    0
+  );
+  const committed = (activePolls ?? []).reduce((s, p) => s + p.allocated_amount, 0);
+  return potBalance - committed;
 }
