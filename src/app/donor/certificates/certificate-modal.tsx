@@ -97,6 +97,30 @@ function buildPrintHtml(data: CertificateData): string {
 </html>`;
 }
 
+/** Small rectangular preview echoing the real certificate's cream/green/gold look. */
+export function CertificateThumbnail() {
+  return (
+    <div
+      className="flex h-10 w-14 shrink-0 flex-col items-center justify-center gap-1 rounded-sm px-1.5"
+      style={{
+        background: "#fffdf5",
+        border: "2px solid #1a3a2a",
+        boxShadow: "inset 0 0 0 1px #b8975a",
+      }}
+    >
+      <span style={{ color: "#b8975a", fontSize: 9, lineHeight: 1 }}>✦</span>
+      <div
+        className="h-0.5 w-8 rounded-full"
+        style={{ background: "#1a3a2a", opacity: 0.4 }}
+      />
+      <div
+        className="h-0.5 w-6 rounded-full"
+        style={{ background: "#1a3a2a", opacity: 0.25 }}
+      />
+    </div>
+  );
+}
+
 export function CertificateModal({
   data,
   driveName,

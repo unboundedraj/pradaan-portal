@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Award } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/money";
-import { CertificateModal } from "./certificate-modal";
+import { CertificateModal, CertificateThumbnail } from "./certificate-modal";
 import type { CertificateData } from "./certificate-modal";
 
 export const metadata: Metadata = { title: "Certificates" };
@@ -103,9 +102,7 @@ export default async function CertificatesPage() {
             className="flex items-center justify-between gap-6 rounded-xl border border-[var(--border)] bg-[var(--card)] px-6 py-5"
           >
             <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10">
-                <Award size={18} className="text-[var(--primary)]" />
-              </div>
+              <CertificateThumbnail />
               <div>
                 <p className="font-semibold text-[var(--foreground)]">
                   {drive.title}
