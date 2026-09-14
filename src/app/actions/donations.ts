@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe";
 import { toCents, formatCurrency } from "@/lib/money";
+import { sendDonationReceiptEmail } from "@/lib/email";
 import type { UserRole } from "@/types/database";
 
 export type DonationState = { error: string } | null;
@@ -160,10 +161,14 @@ export async function createWalletDonation(
   const [{ data: drive }, { data: donorProfile }] = await Promise.all([
     admin
       .from("drives")
-      .select("status, target_amount, current_amount, ends_at")
+      .select("status, target_amount, current_amount, ends_at, title, org_id")
       .eq("id", driveId)
       .single(),
-    admin.from("donor_profiles").select("wallet_balance").eq("id", user.id).single(),
+    admin
+      .from("donor_profiles")
+      .select("wallet_balance, full_name")
+      .eq("id", user.id)
+      .single(),
   ]);
 
   // PENDING drives are not approved; everything else (APPROVED/ACTIVE/COMPLETED) can
@@ -229,6 +234,26 @@ export async function createWalletDonation(
       type: "INFLOW_OVERFLOW",
       drive_id: driveId,
       description: "Overflow from wallet donation",
+    });
+  }
+
+  // Best-effort receipt email — never blocks the donation flow.
+  if (user.email) {
+    const { data: orgProfile } = await admin
+      .from("org_profiles")
+      .select("org_name")
+      .eq("id", drive.org_id)
+      .single();
+
+    await sendDonationReceiptEmail({
+      to: user.email,
+      donorName: donorProfile.full_name ?? "there",
+      amount: amountPaise,
+      driveTitle: drive.title,
+      orgName: orgProfile?.org_name ?? "the organisation",
+      source: "WALLET",
+      overflowAmount: overflow,
+      date: new Date(),
     });
   }
 

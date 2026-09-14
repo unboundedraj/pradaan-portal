@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/server";
+import { sendDonationReceiptEmail, sendWalletTopupEmail } from "@/lib/email";
 
 export async function POST(request: Request) {
   const body = await request.text();
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
     if (type === "donation" && drive_id) {
       const { data: drive, error: driveError } = await admin
         .from("drives")
-        .select("current_amount, target_amount")
+        .select("current_amount, target_amount, title, org_id")
         .eq("id", drive_id)
         .single();
 
@@ -97,6 +98,27 @@ export async function POST(request: Request) {
       console.log(
         `[webhook] donation recorded: donor=${donor_id} drive=${drive_id} amount=${amount} overflow=${overflow}`
       );
+
+      // Best-effort receipt email — never blocks the webhook response.
+      const [{ data: donorProfile }, { data: donorAuth }, { data: orgProfile }] =
+        await Promise.all([
+          admin.from("donor_profiles").select("full_name").eq("id", donor_id).single(),
+          admin.from("profiles").select("email").eq("id", donor_id).single(),
+          admin.from("org_profiles").select("org_name").eq("id", drive.org_id).single(),
+        ]);
+
+      if (donorAuth?.email) {
+        await sendDonationReceiptEmail({
+          to: donorAuth.email,
+          donorName: donorProfile?.full_name ?? "there",
+          amount,
+          driveTitle: drive.title,
+          orgName: orgProfile?.org_name ?? "the organisation",
+          source: "STRIPE",
+          overflowAmount: overflow,
+          date: new Date(),
+        });
+      }
     }
 
     // ── Wallet top-up ──────────────────────────────────────────────────────
@@ -128,7 +150,7 @@ export async function POST(request: Request) {
       // dedicated RPC would make this atomic.
       const { data: profile, error: fetchError } = await admin
         .from("donor_profiles")
-        .select("wallet_balance")
+        .select("full_name, wallet_balance")
         .eq("id", donor_id)
         .single();
 
@@ -140,9 +162,11 @@ export async function POST(request: Request) {
         );
       }
 
+      const newBalance = profile.wallet_balance + amount;
+
       const { error: updateError } = await admin
         .from("donor_profiles")
-        .update({ wallet_balance: profile.wallet_balance + amount })
+        .update({ wallet_balance: newBalance })
         .eq("id", donor_id);
 
       if (updateError) {
@@ -156,6 +180,23 @@ export async function POST(request: Request) {
       console.log(
         `[webhook] wallet topped up: donor=${donor_id} amount=${amount}`
       );
+
+      // Best-effort receipt email — never blocks the webhook response.
+      const { data: donorAuth } = await admin
+        .from("profiles")
+        .select("email")
+        .eq("id", donor_id)
+        .single();
+
+      if (donorAuth?.email) {
+        await sendWalletTopupEmail({
+          to: donorAuth.email,
+          donorName: profile.full_name ?? "there",
+          amount,
+          newBalance,
+          date: new Date(),
+        });
+      }
     }
   }
 
