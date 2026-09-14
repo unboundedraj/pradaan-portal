@@ -56,7 +56,9 @@ export async function Navbar() {
             className="text-[var(--primary)]"
             fill="currentColor"
           />
-          <span>Pradaan</span>
+          <span className="font-display font-bold">
+            Pradaan
+          </span>
         </Link>
 
         {/* Right-hand controls */}
