@@ -35,20 +35,20 @@ Next.js 16 App Router (Vercel Edge / Node.js Runtime)
       │
       ▼
 Supabase (PostgreSQL + Auth + Realtime)
-  ├── auth.users          → Managed by Supabase Auth
-  ├── profiles            → Application-level user mirror (trigger-synced)
-  ├── donor_profiles      → Wallet balance (integer cents)
-  ├── org_profiles        → Organization metadata
-  ├── drives              → Fundraising campaigns
-  ├── donations           → Immutable donation ledger
-  ├── wallet_transactions → Stripe top-up ledger (idempotent via stripe_intent_id)
-  ├── pradaan_pot_ledger  → Central overflow bank
-  ├── polls / poll_options / poll_votes → Governance machinery
-  └── donor_analytics     → Real-time view (materialized roll-up)
+  ├── auth.users                  → Managed by Supabase Auth
+  ├── pradaan_profiles            → Application-level user mirror (trigger-synced)
+  ├── pradaan_donor_profiles      → Wallet balance (integer cents)
+  ├── pradaan_org_profiles        → Organization metadata
+  ├── pradaan_drives              → Fundraising campaigns
+  ├── pradaan_donations           → Immutable donation ledger
+  ├── pradaan_wallet_transactions → Stripe top-up ledger (idempotent via stripe_intent_id)
+  ├── pradaan_pot_ledger          → Central overflow bank
+  ├── pradaan_polls / pradaan_poll_options / pradaan_poll_votes → Governance machinery
+  └── pradaan_donor_analytics     → Real-time roll-up (plain view)
       │
       ▼
 Stripe (Test Mode)
-  └── Payment Intents → Webhook → wallet_transactions insert
+  └── Payment Intents → Webhook → pradaan_wallet_transactions insert
 ```
 
 ---
@@ -80,7 +80,7 @@ export const formatCurrency = (cents: number) =>
 
 ### 2. Transaction Source Duality
 
-Donations can originate from two sources tracked via the `transaction_source` enum:
+Donations can originate from two sources tracked via the `pradaan_transaction_source` enum:
 
 - **`STRIPE`** — Direct card payment via Stripe Checkout (redirects to Stripe, webhook confirms).
 - **`WALLET`** — Deducted from the donor's pre-funded virtual wallet balance (instant, no redirect).
@@ -88,10 +88,10 @@ Donations can originate from two sources tracked via the `transaction_source` en
 Both options are presented on the drive detail page. The wallet button is shown only when the donor has a positive balance and is disabled when the entered amount exceeds the available balance.
 
 **Wallet donation flow** (`donate_from_wallet` RPC — atomic):
-1. `UPDATE donor_profiles SET wallet_balance = wallet_balance - p_amount WHERE wallet_balance >= p_amount` — deducts balance, aborts if insufficient (no negative balance possible).
+1. `UPDATE pradaan_donor_profiles SET wallet_balance = wallet_balance - p_amount WHERE wallet_balance >= p_amount` — deducts balance, aborts if insufficient (no negative balance possible).
 2. `SELECT FOR UPDATE` on the drive row — prevents race conditions.
-3. `INSERT INTO donations (source = 'WALLET')` — immutable ledger entry.
-4. `UPDATE drives.current_amount` — credits the drive (capped at target).
+3. `INSERT INTO pradaan_donations (source = 'WALLET')` — immutable ledger entry.
+4. `UPDATE pradaan_drives.current_amount` — credits the drive (capped at target).
 5. If overflow: `INSERT INTO pradaan_pot_ledger (type = 'INFLOW_OVERFLOW')`.
 
 All five steps are a single atomic transaction. If any step fails the entire donation rolls back.
@@ -146,91 +146,96 @@ Route Handlers (`route.ts`) are used **only** for Stripe webhooks (which require
 
 ## Database Schema
 
+> **Naming convention:** every table, view and enum in this project is prefixed
+> `pradaan_`. The Supabase account hosts several projects, and the prefix makes
+> it unmistakable which tables belong to Pradaan when working in the dashboard
+> or SQL editor. See `supabase/migrations/` for the rename that established this.
+
 ### Enums
 
 ```sql
--- User roles (set at signup, stored in profiles.role)
-CREATE TYPE user_role AS ENUM ('DONOR', 'ORGANIZATION', 'ADMIN');
+-- User roles (set at signup, stored in pradaan_profiles.role)
+CREATE TYPE pradaan_user_role AS ENUM ('DONOR', 'ORGANIZATION', 'ADMIN');
 
 -- Fundraising drive lifecycle
-CREATE TYPE drive_status AS ENUM ('PENDING', 'APPROVED', 'ACTIVE', 'COMPLETED');
+CREATE TYPE pradaan_drive_status AS ENUM ('PENDING', 'APPROVED', 'ACTIVE', 'COMPLETED');
 
 -- Payment origin for a donation
-CREATE TYPE transaction_source AS ENUM ('STRIPE', 'WALLET');
+CREATE TYPE pradaan_transaction_source AS ENUM ('STRIPE', 'WALLET');
 
 -- Direction of money flow in the Pradaan Pot
-CREATE TYPE pot_ledger_type AS ENUM ('INFLOW_OVERFLOW', 'OUTFLOW_POLL');
+CREATE TYPE pradaan_pot_ledger_type AS ENUM ('INFLOW_OVERFLOW', 'OUTFLOW_POLL');
 
 -- State of a governance poll
-CREATE TYPE poll_status AS ENUM ('ACTIVE', 'RESOLVED');
+CREATE TYPE pradaan_poll_status AS ENUM ('ACTIVE', 'RESOLVED');
 ```
 
 ### Tables
 
-#### `profiles`
+#### `pradaan_profiles`
 Bridges `auth.users` to application logic. Populated automatically via an `AFTER INSERT` trigger on `auth.users`.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` | FK → `auth.users.id`, PK |
 | `email` | `text` | Unique |
-| `role` | `user_role` | Set during onboarding |
+| `role` | `pradaan_user_role` | Set during onboarding |
 | `is_verified` | `boolean` | Admin can verify org accounts |
 | `created_at` | `timestamptz` | Auto |
 
-#### `donor_profiles`
-1:1 extension of `profiles` for users with role `DONOR`.
+#### `pradaan_donor_profiles`
+1:1 extension of `pradaan_profiles` for users with role `DONOR`.
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | `uuid` | FK → `profiles.id`, PK |
+| `id` | `uuid` | FK → `pradaan_profiles.id`, PK |
 | `full_name` | `text` | |
 | `wallet_balance` | `integer` | **Cents.** Default `0`. Never negative. |
 
-#### `org_profiles`
-1:1 extension of `profiles` for users with role `ORGANIZATION`.
+#### `pradaan_org_profiles`
+1:1 extension of `pradaan_profiles` for users with role `ORGANIZATION`.
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | `uuid` | FK → `profiles.id`, PK |
+| `id` | `uuid` | FK → `pradaan_profiles.id`, PK |
 | `org_name` | `text` | |
 | `description` | `text` | |
 | `website` | `text` | Optional |
 
-#### `drives`
+#### `pradaan_drives`
 Fundraising campaigns created by organizations.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` | PK |
-| `org_id` | `uuid` | FK → `org_profiles.id` |
+| `org_id` | `uuid` | FK → `pradaan_org_profiles.id` |
 | `title` | `text` | |
 | `description` | `text` | |
 | `target_amount` | `integer` | **Cents** |
 | `current_amount` | `integer` | **Cents.** Incremented by trigger/RPC on donation insert |
-| `status` | `drive_status` | Starts as `PENDING` |
+| `status` | `pradaan_drive_status` | Starts as `PENDING` |
 | `ends_at` | `timestamptz` | Drive expiry |
 | `created_at` | `timestamptz` | Auto |
 
-#### `donations`
+#### `pradaan_donations`
 The immutable financial ledger. Rows are never updated or deleted.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` | PK |
-| `donor_id` | `uuid` | FK → `donor_profiles.id` |
-| `drive_id` | `uuid` | FK → `drives.id` |
+| `donor_id` | `uuid` | FK → `pradaan_donor_profiles.id` |
+| `drive_id` | `uuid` | FK → `pradaan_drives.id` |
 | `amount` | `integer` | **Cents** |
-| `source` | `transaction_source` | `STRIPE` or `WALLET` |
+| `source` | `pradaan_transaction_source` | `STRIPE` or `WALLET` |
 | `created_at` | `timestamptz` | Auto |
 
-#### `wallet_transactions`
+#### `pradaan_wallet_transactions`
 Records every Stripe deposit to a donor's wallet. The `stripe_intent_id` UNIQUE constraint makes webhook processing idempotent.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` | PK |
-| `donor_id` | `uuid` | FK → `donor_profiles.id` |
+| `donor_id` | `uuid` | FK → `pradaan_donor_profiles.id` |
 | `amount` | `integer` | **Cents** |
 | `stripe_intent_id` | `text` | UNIQUE — prevents double-credit |
 | `created_at` | `timestamptz` | Auto |
@@ -241,12 +246,13 @@ Central bank for overflow funds and poll-approved deployments.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` | PK |
-| `type` | `pot_ledger_type` | `INFLOW_OVERFLOW` or `OUTFLOW_POLL` |
+| `type` | `pradaan_pot_ledger_type` | `INFLOW_OVERFLOW` or `OUTFLOW_POLL` |
 | `amount` | `integer` | **Cents** |
-| `reference_id` | `uuid` | FK → `donations.id` (inflow) or `polls.id` (outflow) |
+| `drive_id` | `uuid` | FK → `pradaan_drives.id`. Nullable — set on inflow, null on poll outflow |
+| `description` | `text` | Free text, e.g. `Overflow from donation <id>` |
 | `created_at` | `timestamptz` | Auto |
 
-#### `polls`
+#### `pradaan_polls`
 
 | Column | Type | Notes |
 |---|---|---|
@@ -254,32 +260,32 @@ Central bank for overflow funds and poll-approved deployments.
 | `title` | `text` | |
 | `description` | `text` | |
 | `amount` | `integer` | **Cents** to deploy if resolved |
-| `status` | `poll_status` | |
-| `created_by` | `uuid` | FK → `profiles.id` (Admin only) |
+| `status` | `pradaan_poll_status` | |
+| `created_by` | `uuid` | FK → `pradaan_profiles.id` (Admin only) |
 | `ends_at` | `timestamptz` | |
 
-#### `poll_options`
+#### `pradaan_poll_options`
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` | PK |
-| `poll_id` | `uuid` | FK → `polls.id` |
+| `poll_id` | `uuid` | FK → `pradaan_polls.id` |
 | `label` | `text` | |
 
-#### `poll_votes`
+#### `pradaan_poll_votes`
 Enforces strict 1-vote-per-user via database constraint.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` | PK |
-| `poll_id` | `uuid` | FK → `polls.id` |
-| `user_id` | `uuid` | FK → `profiles.id` |
-| `option_id` | `uuid` | FK → `poll_options.id` |
+| `poll_id` | `uuid` | FK → `pradaan_polls.id` |
+| `user_id` | `uuid` | FK → `pradaan_profiles.id` |
+| `option_id` | `uuid` | FK → `pradaan_poll_options.id` |
 | UNIQUE | `(poll_id, user_id)` | Database-enforced, cannot be bypassed |
 
 ### Views
 
-#### `donor_analytics`
+#### `pradaan_donor_analytics`
 A real-time computed view. No caching, no materialization — always reads live data.
 
 ```sql
@@ -288,18 +294,18 @@ SELECT
   donor_id,
   SUM(amount) AS total_donated_cents,
   COUNT(DISTINCT drive_id) AS total_drives_supported
-FROM donations
+FROM pradaan_donations
 GROUP BY donor_id;
 ```
 
 ### Triggers
 
 #### `on_auth_user_created`
-Fires `AFTER INSERT` on `auth.users`. Automatically inserts a matching row into `public.profiles` so the application always has a profile for every authenticated user.
+Fires `AFTER INSERT` on `auth.users`. Automatically inserts a matching row into `public.pradaan_profiles` so the application always has a profile for every authenticated user.
 
 ```sql
 -- Pseudocode of the trigger function:
-INSERT INTO public.profiles (id, email, role)
+INSERT INTO public.pradaan_profiles (id, email, role)
 VALUES (NEW.id, NEW.email, 'DONOR'); -- default role, updated during onboarding
 ```
 
@@ -315,7 +321,7 @@ Traditional donation drives close the moment they hit 100% of their goal and red
 
 ### The Rule
 
-> Any donation that causes `drives.current_amount` to exceed `drives.target_amount` — or any donation made while `current_amount >= target_amount` — must have its **overflow portion** routed to the Pradaan Pot.
+> Any donation that causes `pradaan_drives.current_amount` to exceed `pradaan_drives.target_amount` — or any donation made while `current_amount >= target_amount` — must have its **overflow portion** routed to the Pradaan Pot.
 
 ### The Math
 
@@ -332,7 +338,7 @@ drive_credit    = donation_amount - overflow_amount
 ```
 drive_credit    = 50,000 - MAX(0, (980,000 + 50,000) - 1,000,000)
                = 50,000 - 30,000
-               = 20,000 cents  → credited to drives.current_amount
+               = 20,000 cents  → credited to pradaan_drives.current_amount
 overflow_amount = 30,000 cents → INFLOW_OVERFLOW in pradaan_pot_ledger
 ```
 
@@ -342,10 +348,10 @@ The overflow calculation runs inside a **PostgreSQL RPC function** (`donate_with
 
 1. `SELECT FOR UPDATE` on the drive row (prevents race conditions on concurrent donations).
 2. Compute `overflow_amount`.
-3. `UPDATE drives SET current_amount = current_amount + drive_credit`.
-4. `INSERT INTO donations` (full `donation_amount` — the ledger records what the donor gave).
-5. If `overflow_amount > 0`: `INSERT INTO pradaan_pot_ledger (type='INFLOW_OVERFLOW', amount=overflow_amount, reference_id=donation_id)`.
-6. If `source = WALLET`: `UPDATE donor_profiles SET wallet_balance = wallet_balance - donation_amount WHERE wallet_balance >= donation_amount` (with a CHECK to prevent negative balance).
+3. `UPDATE pradaan_drives SET current_amount = current_amount + drive_credit`.
+4. `INSERT INTO pradaan_donations` (full `donation_amount` — the ledger records what the donor gave).
+5. If `overflow_amount > 0`: `INSERT INTO pradaan_pot_ledger (type='INFLOW_OVERFLOW', amount=overflow_amount, drive_id=drive_id, description='Overflow from donation <id>')`.
+6. If `source = WALLET`: `UPDATE pradaan_donor_profiles SET wallet_balance = wallet_balance - donation_amount WHERE wallet_balance >= donation_amount` (with a CHECK to prevent negative balance).
 
 All six steps are a single atomic transaction. If any step fails, the entire donation is rolled back.
 
@@ -396,8 +402,8 @@ Winning org receives funds  →  pradaan_pot_ledger OUTFLOW_POLL entry created
 ### Constraints
 
 - **1 vote per user**: Enforced by `UNIQUE(poll_id, user_id)` at the database level. The application layer cannot bypass this — even a bug in the Server Action cannot create two votes for the same user on the same poll.
-- **Only verified donors vote**: RLS policy gates `INSERT` on `poll_votes` to users whose `profiles.role = 'DONOR'`.
-- **Admin-only poll creation**: RLS policy gates `INSERT` on `polls` to users whose `profiles.role = 'ADMIN'`.
+- **Only verified donors vote**: RLS policy gates `INSERT` on `pradaan_poll_votes` to users whose `pradaan_profiles.role = 'DONOR'`.
+- **Admin-only poll creation**: RLS policy gates `INSERT` on `pradaan_polls` to users whose `pradaan_profiles.role = 'ADMIN'`.
 
 ---
 
@@ -470,16 +476,16 @@ Supabase Auth manages sessions via secure HTTP-only cookies (via `@supabase/ssr`
 ### Onboarding Flow
 
 1. User signs up via email/password (Supabase Auth).
-2. The `on_auth_user_created` trigger creates a `profiles` row with a default role.
+2. The `on_auth_user_created` trigger creates a `pradaan_profiles` row with a default role.
 3. The `/signup` page shows a role-selection step (DONOR or ORGANIZATION).
-4. A Server Action updates `profiles.role` and inserts into the corresponding `donor_profiles` or `org_profiles` table.
+4. A Server Action updates `pradaan_profiles.role` and inserts into the corresponding `pradaan_donor_profiles` or `pradaan_org_profiles` table.
 5. The user is redirected to their role-appropriate dashboard.
 
 ### Route Protection
 
 Middleware (`src/middleware.ts`) intercepts all requests:
 - Refreshes the Supabase session cookie.
-- Reads `profiles.role` from the session JWT claims.
+- Reads `pradaan_profiles.role` from the session JWT claims.
 - Redirects unauthenticated users to `/login`.
 - Redirects users to their role-appropriate root if they attempt to access another role's routes.
 
@@ -544,8 +550,8 @@ Run each of these once in the **Supabase SQL editor** (Dashboard → SQL Editor)
 
 ```sql
 -- See the full script in the project history / README context.
--- Covers: profiles, drives, org_profiles, donor_profiles,
---         donations, wallet_transactions, polls, poll_options, poll_votes
+-- Covers: pradaan_profiles, pradaan_drives, pradaan_org_profiles, pradaan_donor_profiles,
+--         pradaan_donations, pradaan_wallet_transactions, pradaan_polls, pradaan_poll_options, pradaan_poll_votes
 ```
 
 **2. `donate_from_wallet` RPC** (required for wallet donations):
@@ -562,12 +568,12 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_drive        drives%ROWTYPE;
+  v_drive        pradaan_drives%ROWTYPE;
   v_overflow     INTEGER;
   v_drive_credit INTEGER;
   v_donation_id  UUID;
 BEGIN
-  UPDATE donor_profiles
+  UPDATE pradaan_donor_profiles
   SET    wallet_balance = wallet_balance - p_amount
   WHERE  id = p_donor_id
     AND  wallet_balance >= p_amount;
@@ -576,22 +582,23 @@ BEGIN
     RAISE EXCEPTION 'Insufficient wallet balance';
   END IF;
 
-  SELECT * INTO v_drive FROM drives WHERE id = p_drive_id FOR UPDATE;
+  SELECT * INTO v_drive FROM pradaan_drives WHERE id = p_drive_id FOR UPDATE;
 
   v_overflow     := GREATEST(0, (v_drive.current_amount + p_amount) - v_drive.target_amount);
   v_drive_credit := p_amount - v_overflow;
 
-  INSERT INTO donations (donor_id, drive_id, amount, source)
+  INSERT INTO pradaan_donations (donor_id, drive_id, amount, source)
   VALUES (p_donor_id, p_drive_id, p_amount, 'WALLET')
   RETURNING id INTO v_donation_id;
 
-  UPDATE drives
+  UPDATE pradaan_drives
   SET current_amount = current_amount + v_drive_credit
   WHERE id = p_drive_id;
 
   IF v_overflow > 0 THEN
-    INSERT INTO pradaan_pot_ledger (type, amount, reference_id)
-    VALUES ('INFLOW_OVERFLOW', v_overflow, v_donation_id);
+    INSERT INTO pradaan_pot_ledger (type, amount, drive_id, description)
+    VALUES ('INFLOW_OVERFLOW', v_overflow, p_drive_id,
+            'Overflow from donation ' || v_donation_id);
   END IF;
 END;
 $$;
@@ -670,7 +677,7 @@ These are the design decisions that set Pradaan apart from a standard fundraisin
 
 - **Integer-only money.** All monetary values are stored as 64-bit integer cents. No floats, no rounding errors, no IEEE 754 surprises — ever.
 
-- **Dual payment sources, one ledger.** Donations can come from Stripe Checkout or from the donor's pre-funded wallet. Both paths produce an identical immutable `donations` row with a `source` flag, so the history is unified regardless of how the payment was made.
+- **Dual payment sources, one ledger.** Donations can come from Stripe Checkout or from the donor's pre-funded wallet. Both paths produce an identical immutable `pradaan_donations` row with a `source` flag, so the history is unified regardless of how the payment was made.
 
 - **Per-drive donor leaderboard.** Every drive page shows a ranked leaderboard of its top contributors — ranked by total amount donated across all contributions to that drive, not just a single transaction. Gold, silver, and bronze recognition for the top three; fully server-rendered, no client JS required.
 
