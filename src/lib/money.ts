@@ -26,12 +26,17 @@ export function computeOverflow(
   targetAmount: number,
   donationAmount: number
 ): { driveCredit: number; overflowAmount: number } {
-  const overflowAmount = Math.max(
-    0,
-    currentAmount + donationAmount - targetAmount
+  // Credit the drive only up to its remaining gap, never more than was given.
+  // Deriving overflow as the remainder guarantees driveCredit + overflowAmount
+  // === donationAmount, so the two ledgers can never invent or lose money.
+  // (Computing overflow first as current + donation - target breaks once a
+  // drive is already past its target: overflow exceeds the donation and the
+  // credit goes negative.)
+  const driveCredit = Math.min(
+    donationAmount,
+    Math.max(0, targetAmount - currentAmount)
   );
-  const driveCredit = donationAmount - overflowAmount;
-  return { driveCredit, overflowAmount };
+  return { driveCredit, overflowAmount: donationAmount - driveCredit };
 }
 
 /** Drive progress as a 0–100 percentage (capped at 100). */

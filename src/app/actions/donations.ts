@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe";
-import { toCents, formatCurrency } from "@/lib/money";
+import { toCents, formatCurrency, computeOverflow } from "@/lib/money";
 import { sendDonationReceiptEmail } from "@/lib/email";
 import type { UserRole } from "@/types/database";
 
@@ -188,10 +188,14 @@ export async function createWalletDonation(
     };
   }
 
-  // Inline the donate_from_wallet RPC — the deployed version references a
-  // non-existent column (reference_id). Replicate its logic directly.
-  const driveGap = Math.max(0, (drive.target_amount ?? 0) - (drive.current_amount ?? 0));
-  const overflow = Math.max(0, amountPaise - driveGap);
+  // Inline the donate_from_wallet RPC rather than calling it — kept in TS so
+  // this path shares computeOverflow with the Stripe webhook and the two can
+  // never drift apart.
+  const { driveCredit, overflowAmount: overflow } = computeOverflow(
+    drive.current_amount ?? 0,
+    drive.target_amount ?? 0,
+    amountPaise
+  );
 
   const { error: walletErr } = await admin
     .from("pradaan_donor_profiles")
@@ -225,7 +229,7 @@ export async function createWalletDonation(
 
   await admin
     .from("pradaan_drives")
-    .update({ current_amount: (drive.current_amount ?? 0) + amountPaise })
+    .update({ current_amount: (drive.current_amount ?? 0) + driveCredit })
     .eq("id", driveId);
 
   if (overflow > 0) {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/server";
+import { computeOverflow } from "@/lib/money";
 import { sendDonationReceiptEmail, sendWalletTopupEmail } from "@/lib/email";
 
 export async function POST(request: Request) {
@@ -49,11 +50,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Drive not found" }, { status: 400 });
       }
 
-      const overflow = Math.max(
-        0,
-        drive.current_amount + amount - drive.target_amount
+      const { driveCredit, overflowAmount: overflow } = computeOverflow(
+        drive.current_amount,
+        drive.target_amount,
+        amount
       );
-      const driveCredit = amount - overflow;
 
       const { data: donation, error: donationError } = await admin
         .from("pradaan_donations")
