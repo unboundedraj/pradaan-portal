@@ -8,14 +8,14 @@ export default async function HomePage() {
   const admin = createAdminClient();
 
   const { data: drives } = await admin
-    .from("drives")
+    .from("pradaan_drives")
     .select("id, title, description, target_amount, current_amount, ends_at, org_id")
     .in("status", ["APPROVED", "ACTIVE", "COMPLETED"])
     .order("created_at", { ascending: false });
 
   const orgIds = [...new Set((drives ?? []).map((d) => d.org_id))];
   const { data: orgProfiles } = orgIds.length
-    ? await admin.from("org_profiles").select("id, org_name").in("id", orgIds)
+    ? await admin.from("pradaan_org_profiles").select("id, org_name").in("id", orgIds)
     : { data: [] };
 
   const orgNameById = Object.fromEntries(

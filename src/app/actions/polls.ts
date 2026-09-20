@@ -19,7 +19,7 @@ export async function castVote(
   const admin = createAdminClient();
 
   const { data: profile } = await admin
-    .from("profiles")
+    .from("pradaan_profiles")
     .select("role")
     .eq("id", user.id)
     .single();
@@ -34,7 +34,7 @@ export async function castVote(
   if (!pollId || !optionId) return { error: "Invalid vote submission." };
 
   const { data: poll } = await admin
-    .from("polls")
+    .from("pradaan_polls")
     .select("status")
     .eq("id", pollId)
     .single();
@@ -44,7 +44,7 @@ export async function castVote(
   }
 
   const { error } = await admin
-    .from("poll_votes")
+    .from("pradaan_poll_votes")
     .insert({ poll_id: pollId, user_id: user.id, option_id: optionId });
 
   if (error) {
@@ -55,14 +55,14 @@ export async function castVote(
 
   // Keep the denormalized counter in sync (best-effort — display uses poll_votes directly).
   const { data: opt } = await admin
-    .from("poll_options")
+    .from("pradaan_poll_options")
     .select("votes_count")
     .eq("id", optionId)
     .single();
 
   if (opt) {
     await admin
-      .from("poll_options")
+      .from("pradaan_poll_options")
       .update({ votes_count: opt.votes_count + 1 })
       .eq("id", optionId);
   }

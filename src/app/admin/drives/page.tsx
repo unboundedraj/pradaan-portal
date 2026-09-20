@@ -9,7 +9,7 @@ export default async function AdminDrivesPage() {
   const admin = await createAdminClient();
 
   const { data: drives } = await admin
-    .from("drives")
+    .from("pradaan_drives")
     .select("id, org_id, title, description, target_amount, ends_at, created_at")
     .eq("status", "PENDING")
     .order("created_at", { ascending: false });
@@ -17,7 +17,7 @@ export default async function AdminDrivesPage() {
   const orgIds = [...new Set((drives ?? []).map((d) => d.org_id))];
   const { data: orgProfiles } = orgIds.length
     ? await admin
-        .from("org_profiles")
+        .from("pradaan_org_profiles")
         .select("id, org_name")
         .in("id", orgIds)
     : { data: [] };

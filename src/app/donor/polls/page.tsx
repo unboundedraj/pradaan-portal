@@ -21,7 +21,7 @@ export default async function DonorPollsPage() {
   const admin = createAdminClient();
 
   const { data: polls } = await admin
-    .from("polls")
+    .from("pradaan_polls")
     .select("id, title, description, allocated_amount, status, ends_at")
     .order("created_at", { ascending: false });
 
@@ -30,13 +30,13 @@ export default async function DonorPollsPage() {
   const [{ data: pollOptions }, { data: allVotes }] = await Promise.all([
     pollIds.length
       ? admin
-          .from("poll_options")
+          .from("pradaan_poll_options")
           .select("id, poll_id, option_text")
           .in("poll_id", pollIds)
       : Promise.resolve({ data: [] }),
     pollIds.length
       ? admin
-          .from("poll_votes")
+          .from("pradaan_poll_votes")
           .select("poll_id, option_id, user_id")
           .in("poll_id", pollIds)
       : Promise.resolve({ data: [] }),

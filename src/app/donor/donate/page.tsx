@@ -17,14 +17,14 @@ export default async function DonorBrowsePage() {
   const [{ data: drives }, { data: orgProfiles }, { data: donorProfile }] =
     await Promise.all([
       admin
-        .from("drives")
+        .from("pradaan_drives")
         .select("id, title, description, target_amount, current_amount, ends_at, org_id")
         .in("status", ["APPROVED", "ACTIVE", "COMPLETED"])
         .order("created_at", { ascending: false }),
-      admin.from("org_profiles").select("id, org_name"),
+      admin.from("pradaan_org_profiles").select("id, org_name"),
       user
         ? admin
-            .from("donor_profiles")
+            .from("pradaan_donor_profiles")
             .select("wallet_balance")
             .eq("id", user.id)
             .single()

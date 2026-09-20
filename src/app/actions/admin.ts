@@ -14,7 +14,7 @@ async function requireAdmin(): Promise<string | null> {
   if (!user) return null;
 
   const { data } = await createAdminClient()
-    .from("profiles")
+    .from("pradaan_profiles")
     .select("role")
     .eq("id", user.id)
     .single();
@@ -31,7 +31,7 @@ export async function verifyOrg(orgId: string, _formData: FormData) {
   if (!(await requireAdmin())) return;
 
   const admin = createAdminClient();
-  await admin.from("profiles").update({ is_verified: true }).eq("id", orgId);
+  await admin.from("pradaan_profiles").update({ is_verified: true }).eq("id", orgId);
   revalidatePath("/admin/orgs");
 }
 
@@ -40,7 +40,7 @@ export async function approveDrive(driveId: string, _formData: FormData) {
 
   const admin = createAdminClient();
   await admin
-    .from("drives")
+    .from("pradaan_drives")
     .update({ status: "APPROVED" })
     .eq("id", driveId);
   revalidatePath("/admin/drives");
@@ -81,7 +81,7 @@ export async function createPoll(
   // Validate against available pot balance (pot total − active poll commitments)
   const [{ data: ledger }, { data: activePolls }] = await Promise.all([
     admin.from("pradaan_pot_ledger").select("type, amount"),
-    admin.from("polls").select("allocated_amount").eq("status", "ACTIVE"),
+    admin.from("pradaan_polls").select("allocated_amount").eq("status", "ACTIVE"),
   ]);
   const potBalance = (ledger ?? []).reduce(
     (s, e) => (e.type === "INFLOW_OVERFLOW" ? s + e.amount : s - e.amount),
@@ -96,7 +96,7 @@ export async function createPoll(
   }
 
   const { data: poll, error: pollError } = await admin
-    .from("polls")
+    .from("pradaan_polls")
     .insert({
       title,
       description,
@@ -112,7 +112,7 @@ export async function createPoll(
   }
 
   const { error: optionsError } = await admin
-    .from("poll_options")
+    .from("pradaan_poll_options")
     .insert(options.map((option_text) => ({ poll_id: poll.id, option_text })));
 
   if (optionsError) {
@@ -131,14 +131,14 @@ export async function resolvePoll(pollId: string, _formData: FormData) {
 
   const admin = createAdminClient();
   const { data: poll } = await admin
-    .from("polls")
+    .from("pradaan_polls")
     .select("status, allocated_amount, title")
     .eq("id", pollId)
     .single();
 
   if (!poll || poll.status !== "ACTIVE") return;
 
-  await admin.from("polls").update({ status: "RESOLVED" }).eq("id", pollId);
+  await admin.from("pradaan_polls").update({ status: "RESOLVED" }).eq("id", pollId);
 
   await admin.from("pradaan_pot_ledger").insert({
     type: "OUTFLOW_POLL",
@@ -155,7 +155,7 @@ export async function getAvailablePotBalance(): Promise<number> {
   const admin = createAdminClient();
   const [{ data: ledger }, { data: activePolls }] = await Promise.all([
     admin.from("pradaan_pot_ledger").select("type, amount"),
-    admin.from("polls").select("allocated_amount").eq("status", "ACTIVE"),
+    admin.from("pradaan_polls").select("allocated_amount").eq("status", "ACTIVE"),
   ]);
   const potBalance = (ledger ?? []).reduce(
     (s, e) => (e.type === "INFLOW_OVERFLOW" ? s + e.amount : s - e.amount),

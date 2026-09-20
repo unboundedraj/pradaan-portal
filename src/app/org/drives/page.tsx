@@ -24,7 +24,7 @@ export default async function OrgDrivesPage() {
 
   const admin = createAdminClient();
   const { data: drives } = await admin
-    .from("drives")
+    .from("pradaan_drives")
     .select("id, title, status, target_amount, current_amount, ends_at, created_at")
     .eq("org_id", user!.id)
     .order("created_at", { ascending: false });

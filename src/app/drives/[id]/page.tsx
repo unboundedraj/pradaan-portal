@@ -15,7 +15,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const admin = createAdminClient();
-  const { data } = await admin.from("drives").select("title").eq("id", id).single();
+  const { data } = await admin.from("pradaan_drives").select("title").eq("id", id).single();
   return { title: data?.title ?? "Drive" };
 }
 
@@ -28,7 +28,7 @@ export default async function DriveDetailPage({
   const admin = createAdminClient();
 
   const { data: drive } = await admin
-    .from("drives")
+    .from("pradaan_drives")
     .select("*")
     .eq("id", id)
     .in("status", ["APPROVED", "ACTIVE", "COMPLETED"])
@@ -37,8 +37,8 @@ export default async function DriveDetailPage({
   if (!drive) notFound();
 
   const [{ data: orgProfile }, { data: driveDonations }] = await Promise.all([
-    admin.from("org_profiles").select("org_name").eq("id", drive.org_id).single(),
-    admin.from("donations").select("donor_id, amount").eq("drive_id", id),
+    admin.from("pradaan_org_profiles").select("org_name").eq("id", drive.org_id).single(),
+    admin.from("pradaan_donations").select("donor_id, amount").eq("drive_id", id),
   ]);
 
   // Aggregate donations by donor and rank
@@ -53,7 +53,7 @@ export default async function DriveDetailPage({
 
   const { data: donorNames } = rankedDonorIds.length
     ? await admin
-        .from("donor_profiles")
+        .from("pradaan_donor_profiles")
         .select("id, full_name")
         .in("id", rankedDonorIds)
     : { data: [] };
@@ -78,7 +78,7 @@ export default async function DriveDetailPage({
   let walletBalance = 0;
   if (user) {
     const { data: profile } = await admin
-      .from("profiles")
+      .from("pradaan_profiles")
       .select("role")
       .eq("id", user.id)
       .single();
@@ -86,7 +86,7 @@ export default async function DriveDetailPage({
 
     if (donorRole === "DONOR") {
       const { data: donorProfile } = await admin
-        .from("donor_profiles")
+        .from("pradaan_donor_profiles")
         .select("wallet_balance")
         .eq("id", user.id)
         .single();

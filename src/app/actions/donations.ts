@@ -25,7 +25,7 @@ export async function createDonationCheckout(
   // Only donors can make direct donations — use admin client so RLS doesn't block the read.
   const admin = createAdminClient();
   const { data: profile } = await admin
-    .from("profiles")
+    .from("pradaan_profiles")
     .select("role")
     .eq("id", user.id)
     .single();
@@ -43,7 +43,7 @@ export async function createDonationCheckout(
   }
 
   const { data: drive } = await admin
-    .from("drives")
+    .from("pradaan_drives")
     .select("title, status, ends_at")
     .eq("id", driveId)
     .single();
@@ -141,7 +141,7 @@ export async function createWalletDonation(
 
   const admin = createAdminClient();
   const { data: profile } = await admin
-    .from("profiles")
+    .from("pradaan_profiles")
     .select("role")
     .eq("id", user.id)
     .single();
@@ -160,12 +160,12 @@ export async function createWalletDonation(
 
   const [{ data: drive }, { data: donorProfile }] = await Promise.all([
     admin
-      .from("drives")
+      .from("pradaan_drives")
       .select("status, target_amount, current_amount, ends_at, title, org_id")
       .eq("id", driveId)
       .single(),
     admin
-      .from("donor_profiles")
+      .from("pradaan_donor_profiles")
       .select("wallet_balance, full_name")
       .eq("id", user.id)
       .single(),
@@ -194,7 +194,7 @@ export async function createWalletDonation(
   const overflow = Math.max(0, amountPaise - driveGap);
 
   const { error: walletErr } = await admin
-    .from("donor_profiles")
+    .from("pradaan_donor_profiles")
     .update({ wallet_balance: donorProfile.wallet_balance - amountPaise })
     .eq("id", user.id);
 
@@ -203,7 +203,7 @@ export async function createWalletDonation(
     return { error: "Failed to deduct wallet balance. Please try again." };
   }
 
-  await admin.from("wallet_transactions").insert({
+  await admin.from("pradaan_wallet_transactions").insert({
     donor_id: user.id,
     amount: amountPaise,
     type: "DEBIT",
@@ -211,7 +211,7 @@ export async function createWalletDonation(
     description: "Donation to drive",
   });
 
-  const { error: donationErr } = await admin.from("donations").insert({
+  const { error: donationErr } = await admin.from("pradaan_donations").insert({
     donor_id: user.id,
     drive_id: driveId,
     amount: amountPaise,
@@ -224,7 +224,7 @@ export async function createWalletDonation(
   }
 
   await admin
-    .from("drives")
+    .from("pradaan_drives")
     .update({ current_amount: (drive.current_amount ?? 0) + amountPaise })
     .eq("id", driveId);
 
@@ -240,7 +240,7 @@ export async function createWalletDonation(
   // Best-effort receipt email — never blocks the donation flow.
   if (user.email) {
     const { data: orgProfile } = await admin
-      .from("org_profiles")
+      .from("pradaan_org_profiles")
       .select("org_name")
       .eq("id", drive.org_id)
       .single();

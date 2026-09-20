@@ -35,7 +35,7 @@ export async function GET(request: Request) {
         // fully propagated within the same request.
         const admin = await createAdminClient();
         const { data: profile } = await admin
-          .from("profiles")
+          .from("pradaan_profiles")
           .select("role")
           .eq("id", user.id)
           .single();

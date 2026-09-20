@@ -19,7 +19,7 @@ function createAdminClient() {
 
 async function getRole(userId: string): Promise<UserRole | null> {
   const { data } = await createAdminClient()
-    .from("profiles")
+    .from("pradaan_profiles")
     .select("role")
     .eq("id", userId)
     .single();

@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     // ── Donation via Stripe ────────────────────────────────────────────────
     if (type === "donation" && drive_id) {
       const { data: drive, error: driveError } = await admin
-        .from("drives")
+        .from("pradaan_drives")
         .select("current_amount, target_amount, title, org_id")
         .eq("id", drive_id)
         .single();
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       const driveCredit = amount - overflow;
 
       const { data: donation, error: donationError } = await admin
-        .from("donations")
+        .from("pradaan_donations")
         .insert({ donor_id, drive_id, amount, source: "STRIPE" })
         .select("id")
         .single();
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
 
       if (driveCredit > 0) {
         const { error: driveUpdateError } = await admin
-          .from("drives")
+          .from("pradaan_drives")
           .update({ current_amount: drive.current_amount + driveCredit })
           .eq("id", drive_id);
 
@@ -102,9 +102,9 @@ export async function POST(request: Request) {
       // Best-effort receipt email — never blocks the webhook response.
       const [{ data: donorProfile }, { data: donorAuth }, { data: orgProfile }] =
         await Promise.all([
-          admin.from("donor_profiles").select("full_name").eq("id", donor_id).single(),
-          admin.from("profiles").select("email").eq("id", donor_id).single(),
-          admin.from("org_profiles").select("org_name").eq("id", drive.org_id).single(),
+          admin.from("pradaan_donor_profiles").select("full_name").eq("id", donor_id).single(),
+          admin.from("pradaan_profiles").select("email").eq("id", donor_id).single(),
+          admin.from("pradaan_org_profiles").select("org_name").eq("id", drive.org_id).single(),
         ]);
 
       if (donorAuth?.email) {
@@ -130,7 +130,7 @@ export async function POST(request: Request) {
             session.id; // fallback to session id if PI not expanded
 
       const { error: txError } = await admin
-        .from("wallet_transactions")
+        .from("pradaan_wallet_transactions")
         .insert({
           donor_id,
           amount,
@@ -149,7 +149,7 @@ export async function POST(request: Request) {
       // Increment wallet balance. Two-step op — acceptable for now; a
       // dedicated RPC would make this atomic.
       const { data: profile, error: fetchError } = await admin
-        .from("donor_profiles")
+        .from("pradaan_donor_profiles")
         .select("full_name, wallet_balance")
         .eq("id", donor_id)
         .single();
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
       const newBalance = profile.wallet_balance + amount;
 
       const { error: updateError } = await admin
-        .from("donor_profiles")
+        .from("pradaan_donor_profiles")
         .update({ wallet_balance: newBalance })
         .eq("id", donor_id);
 
@@ -183,7 +183,7 @@ export async function POST(request: Request) {
 
       // Best-effort receipt email — never blocks the webhook response.
       const { data: donorAuth } = await admin
-        .from("profiles")
+        .from("pradaan_profiles")
         .select("email")
         .eq("id", donor_id)
         .single();

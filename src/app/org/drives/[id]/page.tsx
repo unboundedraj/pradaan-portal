@@ -30,7 +30,7 @@ export default async function DriveDetailPage({
 
   const admin = createAdminClient();
   const { data: drive } = await admin
-    .from("drives")
+    .from("pradaan_drives")
     .select("*")
     .eq("id", id)
     .eq("org_id", user!.id) // scoped to this org — prevents peeking at other orgs' drives

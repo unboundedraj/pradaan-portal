@@ -8,7 +8,7 @@ async function getTickerItems(): Promise<string[]> {
   const admin = createAdminClient();
 
   const { data: resolvedPolls } = await admin
-    .from("polls")
+    .from("pradaan_polls")
     .select("id, title, allocated_amount")
     .eq("status", "RESOLVED")
     .order("created_at", { ascending: false })
@@ -19,8 +19,8 @@ async function getTickerItems(): Promise<string[]> {
   const pollIds = resolvedPolls.map((p) => p.id);
 
   const [{ data: votes }, { data: options }] = await Promise.all([
-    admin.from("poll_votes").select("poll_id, option_id").in("poll_id", pollIds),
-    admin.from("poll_options").select("id, poll_id, option_text").in("poll_id", pollIds),
+    admin.from("pradaan_poll_votes").select("poll_id, option_id").in("poll_id", pollIds),
+    admin.from("pradaan_poll_options").select("id, poll_id, option_text").in("poll_id", pollIds),
   ]);
 
   // Count votes per option

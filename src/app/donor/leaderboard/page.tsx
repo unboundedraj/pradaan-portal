@@ -17,7 +17,7 @@ export default async function LeaderboardPage() {
   const admin = createAdminClient();
 
   const { data: donations } = await admin
-    .from("donations")
+    .from("pradaan_donations")
     .select("donor_id, drive_id, amount");
 
   // Aggregate total given + distinct drives supported, per donor
@@ -33,7 +33,7 @@ export default async function LeaderboardPage() {
     .map(([id]) => id);
 
   const { data: donorProfiles } = rankedIds.length
-    ? await admin.from("donor_profiles").select("id, full_name").in("id", rankedIds)
+    ? await admin.from("pradaan_donor_profiles").select("id, full_name").in("id", rankedIds)
     : { data: [] };
 
   const nameById = Object.fromEntries(

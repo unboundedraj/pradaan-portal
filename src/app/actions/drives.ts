@@ -21,7 +21,7 @@ export async function createDrive(
   // Verify caller is an org — use admin client so RLS doesn't block the read.
   const admin = createAdminClient();
   const { data: profile } = await admin
-    .from("profiles")
+    .from("pradaan_profiles")
     .select("role")
     .eq("id", user.id)
     .single();
@@ -45,7 +45,7 @@ export async function createDrive(
   }
 
   const { data: drive, error } = await admin
-    .from("drives")
+    .from("pradaan_drives")
     .insert({
       org_id: user.id,
       title,

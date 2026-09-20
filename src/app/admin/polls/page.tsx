@@ -19,7 +19,7 @@ export default async function AdminPollsPage() {
 
   const [{ data: polls }, available] = await Promise.all([
     admin
-      .from("polls")
+      .from("pradaan_polls")
       .select("id, title, status, allocated_amount, ends_at, created_at")
       .order("created_at", { ascending: false }),
     getAvailablePotBalance(),

@@ -14,20 +14,20 @@ export default async function AdminOverviewPage() {
     { count: totalDonors },
   ] = await Promise.all([
     admin
-      .from("drives")
+      .from("pradaan_drives")
       .select("id", { count: "exact", head: true })
       .eq("status", "PENDING"),
     admin
-      .from("profiles")
+      .from("pradaan_profiles")
       .select("id", { count: "exact", head: true })
       .eq("role", "ORGANIZATION")
       .eq("is_verified", false),
     admin
-      .from("polls")
+      .from("pradaan_polls")
       .select("id", { count: "exact", head: true })
       .eq("status", "ACTIVE"),
     admin
-      .from("profiles")
+      .from("pradaan_profiles")
       .select("id", { count: "exact", head: true })
       .eq("role", "DONOR"),
   ]);

@@ -31,7 +31,7 @@ export async function Navbar() {
     if (user) {
       userEmail = user.email ?? null;
       const { data: profile } = await createAdminClient()
-        .from("profiles")
+        .from("pradaan_profiles")
         .select("role")
         .eq("id", user.id)
         .single();

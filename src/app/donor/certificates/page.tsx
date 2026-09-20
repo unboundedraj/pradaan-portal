@@ -18,9 +18,9 @@ export default async function CertificatesPage() {
   const admin = createAdminClient();
 
   const [{ data: donorProfile }, { data: donations }] = await Promise.all([
-    admin.from("donor_profiles").select("full_name").eq("id", user.id).single(),
+    admin.from("pradaan_donor_profiles").select("full_name").eq("id", user.id).single(),
     admin
-      .from("donations")
+      .from("pradaan_donations")
       .select("drive_id, amount, created_at")
       .eq("donor_id", user.id)
       .order("created_at", { ascending: false }),
@@ -53,14 +53,14 @@ export default async function CertificatesPage() {
 
   const [{ data: drives }, ] = await Promise.all([
     admin
-      .from("drives")
+      .from("pradaan_drives")
       .select("id, title, org_id")
       .in("id", driveIds),
   ]);
 
   const orgIds = [...new Set((drives ?? []).map((d) => d.org_id))];
   const { data: orgs } = await admin
-    .from("org_profiles")
+    .from("pradaan_org_profiles")
     .select("id, org_name")
     .in("id", orgIds);
 

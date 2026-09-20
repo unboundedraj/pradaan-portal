@@ -52,7 +52,7 @@ export async function signIn(
   // Use the admin client so the role read is never blocked by RLS.
   const admin = createAdminClient();
   const { data: profile } = await admin
-    .from("profiles")
+    .from("pradaan_profiles")
     .select("role")
     .eq("id", data.user.id)
     .single();
@@ -115,7 +115,7 @@ export async function signUp(
   // rejection (e.g. trigger-created row already exists with a conflict we
   // don't expect) surfaces as data=null instead of disappearing.
   const { data: upsertedProfile, error: roleError } = await admin
-    .from("profiles")
+    .from("pradaan_profiles")
     .upsert({ id: userId, email, role, is_verified: false }, { onConflict: "id" })
     .select("id")
     .single();
@@ -132,7 +132,7 @@ export async function signUp(
     if (!fullName?.trim()) return { error: "Full name is required." };
 
     const { error: profileError } = await admin
-      .from("donor_profiles")
+      .from("pradaan_donor_profiles")
       .insert({ id: userId, full_name: fullName.trim() });
 
     if (profileError) {
@@ -148,7 +148,7 @@ export async function signUp(
       return { error: "Organisation name and description are required." };
     }
 
-    const { error: profileError } = await admin.from("org_profiles").insert({
+    const { error: profileError } = await admin.from("pradaan_org_profiles").insert({
       id: userId,
       org_name: orgName.trim(),
       description: description.trim(),

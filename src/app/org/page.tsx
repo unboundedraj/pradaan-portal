@@ -13,12 +13,12 @@ export default async function OrgOverviewPage() {
   const admin = createAdminClient();
   const [{ data: profile }, { data: drives }] = await Promise.all([
     admin
-      .from("org_profiles")
+      .from("pradaan_org_profiles")
       .select("org_name")
       .eq("id", user!.id)
       .single(),
     admin
-      .from("drives")
+      .from("pradaan_drives")
       .select("id, status, current_amount, target_amount")
       .eq("org_id", user!.id),
   ]);

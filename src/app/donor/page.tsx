@@ -23,12 +23,12 @@ export default async function DonorWalletPage({
 
   const [{ data: donorProfile }, { data: donations }] = await Promise.all([
     admin
-      .from("donor_profiles")
+      .from("pradaan_donor_profiles")
       .select("full_name, wallet_balance")
       .eq("id", user!.id)
       .single(),
     admin
-      .from("donations")
+      .from("pradaan_donations")
       .select("id, amount, source, created_at, drive_id")
       .eq("donor_id", user!.id)
       .order("created_at", { ascending: false })
@@ -39,7 +39,7 @@ export default async function DonorWalletPage({
   const driveIds = [...new Set((donations ?? []).map((d) => d.drive_id))];
   const { data: drives } = driveIds.length
     ? await admin
-        .from("drives")
+        .from("pradaan_drives")
         .select("id, title")
         .in("id", driveIds)
     : { data: [] };

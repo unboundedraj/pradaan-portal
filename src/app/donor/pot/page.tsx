@@ -14,9 +14,9 @@ export default async function PradaanPotPage() {
         .from("pradaan_pot_ledger")
         .select("id, type, amount, drive_id, description, created_at")
         .order("created_at", { ascending: false }),
-      admin.from("drives").select("id, title"),
+      admin.from("pradaan_drives").select("id, title"),
       admin
-        .from("polls")
+        .from("pradaan_polls")
         .select("title, allocated_amount")
         .eq("status", "ACTIVE"),
     ]);

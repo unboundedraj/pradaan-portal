@@ -16,7 +16,7 @@ export type PollStatus = "ACTIVE" | "RESOLVED";
 export interface Database {
   public: {
     Tables: {
-      profiles: {
+      pradaan_profiles: {
         Row: {
           id: string;
           email: string;
@@ -39,7 +39,7 @@ export interface Database {
         };
         Relationships: [];
       };
-      donor_profiles: {
+      pradaan_donor_profiles: {
         Row: {
           id: string;
           full_name: string;
@@ -56,7 +56,7 @@ export interface Database {
         };
         Relationships: [];
       };
-      org_profiles: {
+      pradaan_org_profiles: {
         Row: {
           id: string;
           org_name: string;
@@ -76,7 +76,7 @@ export interface Database {
         };
         Relationships: [];
       };
-      drives: {
+      pradaan_drives: {
         Row: {
           id: string;
           org_id: string;
@@ -109,7 +109,7 @@ export interface Database {
         };
         Relationships: [];
       };
-      donations: {
+      pradaan_donations: {
         Row: {
           id: string;
           donor_id: string;
@@ -129,7 +129,7 @@ export interface Database {
         Update: Record<string, never>; // immutable ledger
         Relationships: [];
       };
-      wallet_transactions: {
+      pradaan_wallet_transactions: {
         Row: {
           id: string;
           donor_id: string;
@@ -173,7 +173,7 @@ export interface Database {
         Update: Record<string, never>; // immutable ledger
         Relationships: [];
       };
-      polls: {
+      pradaan_polls: {
         Row: {
           id: string;
           title: string;
@@ -200,7 +200,7 @@ export interface Database {
         };
         Relationships: [];
       };
-      poll_options: {
+      pradaan_poll_options: {
         Row: {
           id: string;
           poll_id: string;
@@ -219,7 +219,7 @@ export interface Database {
         };
         Relationships: [];
       };
-      poll_votes: {
+      pradaan_poll_votes: {
         Row: {
           id: string;
           poll_id: string;
@@ -239,7 +239,7 @@ export interface Database {
       };
     };
     Views: {
-      donor_analytics: {
+      pradaan_donor_analytics: {
         Row: {
           donor_id: string;
           total_donated_cents: number;
@@ -263,11 +263,11 @@ export interface Database {
       };
     };
     Enums: {
-      user_role: UserRole;
-      drive_status: DriveStatus;
-      transaction_source: TransactionSource;
-      pot_ledger_type: PotLedgerType;
-      poll_status: PollStatus;
+      pradaan_user_role: UserRole;
+      pradaan_drive_status: DriveStatus;
+      pradaan_transaction_source: TransactionSource;
+      pradaan_pot_ledger_type: PotLedgerType;
+      pradaan_poll_status: PollStatus;
     };
     CompositeTypes: {
       [_ in never]: never;

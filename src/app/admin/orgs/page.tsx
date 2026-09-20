@@ -9,7 +9,7 @@ export default async function AdminOrgsPage() {
   const admin = await createAdminClient();
 
   const { data: profiles } = await admin
-    .from("profiles")
+    .from("pradaan_profiles")
     .select("id, email, is_verified, created_at")
     .eq("role", "ORGANIZATION")
     .order("created_at", { ascending: false });
@@ -17,7 +17,7 @@ export default async function AdminOrgsPage() {
   const orgIds = profiles?.map((p) => p.id) ?? [];
   const { data: orgProfiles } = orgIds.length
     ? await admin
-        .from("org_profiles")
+        .from("pradaan_org_profiles")
         .select("id, org_name, description, website")
         .in("id", orgIds)
     : { data: [] };
